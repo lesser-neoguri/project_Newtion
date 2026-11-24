@@ -16,6 +16,7 @@ Next.js 16 · Supabase (Postgres / Auth / Realtime / Storage) · BlockNote + Yjs
 | 🔑 로그인 | GitHub, Google 계정, 이메일+비밀번호, 메일 링크(비밀번호 없이) |
 | 🔐 권한 | 소유자 / 편집자 / 뷰어. 이메일로 초대 (미가입자는 가입 시 자동 참여). 모든 테이블에 RLS 적용 |
 | 🤖 문서 도우미 | 오른쪽 아래 버튼. 이 페이지 / 하위 포함 / 워크스페이스 전체 범위의 문서를 바탕으로 Claude가 답변 (`ANTHROPIC_API_KEY` 필요) |
+| ✨ 문서 정리 | 페이지 상단 ✨ 버튼. Claude가 문서를 정리(전체 / 맞춤법 / 구조)하고, 바뀐 줄을 컴파일러 출력창처럼 diff와 error·warning·info로 보여줌. 적용 전까지 원문 유지 |
 | 📱 모바일 | 서랍형 사이드바, 터치용 버튼 표시, 전체 화면 챗봇·댓글 |
 | 🔎 검색 | `⌘K` / `Ctrl+K` |
 | 🖼️ 업로드 | 에디터 이미지/파일 업로드는 Supabase Storage `uploads` 버킷에 저장 |

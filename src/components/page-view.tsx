@@ -6,13 +6,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronRight, FileText, ImageIcon, Link2, MessageSquare, MoreHorizontal, Plus, Smile, Star, Table2, Trash2,
-  RotateCcw, LayoutTemplate,
+  RotateCcw, LayoutTemplate, Wand2,
 } from "lucide-react";
 import { useWorkspace } from "./workspace-context";
 import { Avatar, EmojiPicker, MenuItem, Popover, Spinner } from "./ui";
 import { DatabaseView } from "./database-view";
 import { PropertyCell } from "./property-cell";
 import { CommentsPanel } from "./comments";
+import { TidyPanel } from "./tidy-panel";
+import type { BlockNoteEditor } from "./editor";
 import { createPage, deleteForever, setArchived } from "@/lib/api";
 import { COVERS, type DbSchema, type Page, type PageMeta, type PropValue, type PropOption } from "@/lib/types";
 
@@ -29,6 +31,8 @@ export function PageView({ pageId }: { pageId: string }) {
   const [saveState, setSaveState] = useState<"saving" | "saved" | "error" | null>(null);
   const [menu, setMenu] = useState(false);
   const [iconPicker, setIconPicker] = useState(false);
+  const [showTidy, setShowTidy] = useState(false);
+  const [editor, setEditor] = useState<BlockNoteEditor | null>(null);
 
   // Load page
   useEffect(() => {
@@ -158,6 +162,12 @@ export function PageView({ pageId }: { pageId: string }) {
               <Avatar key={v.user_id} ring size={24} profile={{ display_name: v.name, avatar_color: v.color, email: "" }} />
             ))}
           </div>
+          {editable && page.kind !== "database" && (
+            <button title="문서 정리 (AI)" onClick={() => setShowTidy((v) => !v)} className={`flex items-center gap-1 rounded p-1.5 hover:bg-hover ${showTidy ? "bg-hover" : ""}`}>
+              <Wand2 size={16} />
+              <span className="hidden text-xs lg:inline">정리</span>
+            </button>
+          )}
           <button title="댓글" onClick={() => setShowComments((v) => !v)} className={`rounded p-1.5 hover:bg-hover ${showComments ? "bg-hover" : ""}`}>
             <MessageSquare size={16} />
           </button>
@@ -283,6 +293,7 @@ export function PageView({ pageId }: { pageId: string }) {
                   me={me}
                   editable={editable}
                   onSaveState={setSaveState}
+                  onEditor={setEditor}
                 />
                 {page.kind === "doc" && (
                   <SubPages pageId={pageId} childPages={childPages} canEdit={editable} />
@@ -291,6 +302,9 @@ export function PageView({ pageId }: { pageId: string }) {
             )}
           </div>
         </div>
+        {showTidy && editable && page.kind !== "database" && (
+          <TidyPanel editor={editor} pageId={pageId} pageTitle={page.title} onClose={() => setShowTidy(false)} />
+        )}
       </div>
       {showComments && <CommentsPanel pageId={pageId} onClose={() => setShowComments(false)} />}
     </div>

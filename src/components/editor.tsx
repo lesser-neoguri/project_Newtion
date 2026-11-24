@@ -8,7 +8,7 @@ import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { withCollaboration } from "@blocknote/core/yjs";
 import { ko } from "@blocknote/core/locales";
-import type { PartialBlock } from "@blocknote/core";
+import type { BlockNoteEditor, PartialBlock } from "@blocknote/core";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { SupabaseYProvider, fromB64, toB64 } from "@/lib/yjs-supabase";
 import { uploadFile } from "@/lib/api";
@@ -23,7 +23,11 @@ interface Props {
   me: Profile;
   editable: boolean;
   onSaveState?: (s: "saving" | "saved" | "error") => void;
+  /** Receives the editor instance once mounted (null on unmount). */
+  onEditor?: (editor: BlockNoteEditor | null) => void;
 }
+
+export type { BlockNoteEditor };
 
 /** Sets up the Y.Doc + realtime provider for a page, then renders the editor. */
 export default function CollaborativeEditor(props: Props) {
@@ -79,7 +83,7 @@ function useColorScheme() {
 }
 
 function EditorInner({
-  sb, pageId, workspaceId, initialContent, me, editable, onSaveState, doc, provider,
+  sb, pageId, workspaceId, initialContent, me, editable, onSaveState, onEditor, doc, provider,
 }: Props & { doc: Y.Doc; provider: SupabaseYProvider }) {
   const theme = useColorScheme();
   const fragment = doc.getXmlFragment("document-store");
@@ -100,6 +104,11 @@ function EditorInner({
     }),
     [doc, provider],
   );
+
+  useEffect(() => {
+    onEditor?.(editor as unknown as BlockNoteEditor);
+    return () => onEditor?.(null);
+  }, [editor, onEditor]);
 
   // Seed a page that has JSON content (e.g. from a template) but an empty Yjs doc.
   // y-prosemirror creates one empty paragraph on mount, so check for "empty", not length 0.
