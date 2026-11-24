@@ -352,7 +352,7 @@ export function TidyPanel({
       </div>
 
       {/* Status bar */}
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-zinc-800 bg-[#007acc] px-3 py-1.5 font-sans text-xs text-white" style={{ paddingBottom: "max(0.375rem, env(safe-area-inset-bottom))" }}>
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-zinc-800 bg-[#007acc] px-3 py-1.5 font-sans text-xs text-white md:pr-20" style={{ paddingBottom: "max(0.375rem, env(safe-area-inset-bottom))" }}>
         <span className="min-w-0 flex-1 truncate">
           {phase === "idle" && "준비됨"}
           {phase === "running" && `정리 중… ${elapsed.toFixed(0)}s`}

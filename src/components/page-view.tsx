@@ -84,7 +84,11 @@ export function PageView({ pageId }: { pageId: string }) {
     setPage((prev) => (prev ? { ...prev, title } : prev));
     upsertPageLocal({ id: pageId, title });
     if (titleTimer.current) clearTimeout(titleTimer.current);
-    titleTimer.current = setTimeout(() => void sb.from("pages").update({ title }).eq("id", pageId), 400);
+    titleTimer.current = setTimeout(async () => {
+      // Supabase builders are lazy: the request only runs when awaited.
+      const { error } = await sb.from("pages").update({ title }).eq("id", pageId);
+      if (error) console.error("title save failed", error);
+    }, 400);
   };
 
   if (notFound) {

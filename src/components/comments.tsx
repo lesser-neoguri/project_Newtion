@@ -77,13 +77,13 @@ export function CommentsPanel({ pageId, onClose }: { pageId: string; onClose: ()
                 <span className="ml-auto flex touch-show opacity-0 group-hover:opacity-100">
                   {(canEdit || c.user_id === me.id) && (
                     <button title={c.resolved ? "다시 열기" : "해결"} className="rounded p-1 hover:bg-hover"
-                      onClick={() => sb.from("comments").update({ resolved: !c.resolved }).eq("id", c.id)}>
+                      onClick={async () => { await sb.from("comments").update({ resolved: !c.resolved }).eq("id", c.id); }}>
                       <Check size={14} />
                     </button>
                   )}
                   {(c.user_id === me.id || role === "owner") && (
                     <button title="삭제" className="rounded p-1 text-red-500 hover:bg-hover"
-                      onClick={() => sb.from("comments").delete().eq("id", c.id)}>
+                      onClick={async () => { await sb.from("comments").delete().eq("id", c.id); }}>
                       <Trash2 size={14} />
                     </button>
                   )}
