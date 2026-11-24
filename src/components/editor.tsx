@@ -53,6 +53,19 @@ export default function CollaborativeEditor(props: Props) {
   return <EditorInner key={props.pageId} {...props} doc={session.doc} provider={session.provider} />;
 }
 
+/** True when a document has no blocks, or only empty paragraphs. */
+function isEmptyDoc(blocks: unknown[] | null | undefined) {
+  if (!blocks?.length) return true;
+  return blocks.every((b) => {
+    const blk = b as { type?: string; content?: unknown; children?: unknown[] };
+    const noText =
+      blk.content == null ||
+      blk.content === "" ||
+      (Array.isArray(blk.content) && blk.content.length === 0);
+    return blk.type === "paragraph" && noText && !blk.children?.length;
+  });
+}
+
 function useColorScheme() {
   const [dark, setDark] = useState(false);
   useEffect(() => {
@@ -66,7 +79,7 @@ function useColorScheme() {
 }
 
 function EditorInner({
-  sb, pageId, workspaceId, initialYdoc, initialContent, me, editable, onSaveState, doc, provider,
+  sb, pageId, workspaceId, initialContent, me, editable, onSaveState, doc, provider,
 }: Props & { doc: Y.Doc; provider: SupabaseYProvider }) {
   const theme = useColorScheme();
   const fragment = doc.getXmlFragment("document-store");
@@ -88,11 +101,12 @@ function EditorInner({
     [doc, provider],
   );
 
-  // Seed a page that has JSON content (e.g. from a template) but no Yjs state yet.
+  // Seed a page that has JSON content (e.g. from a template) but an empty Yjs doc.
+  // y-prosemirror creates one empty paragraph on mount, so check for "empty", not length 0.
   useEffect(() => {
-    if (initialYdoc || !initialContent?.length) return;
+    if (!editable || isEmptyDoc(initialContent)) return;
     provider.onSynced(() => {
-      if (fragment.length === 0 && editable) {
+      if (isEmptyDoc(editor.document)) {
         editor.replaceBlocks(editor.document, initialContent as PartialBlock[]);
       }
     });
