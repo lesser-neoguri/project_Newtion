@@ -19,8 +19,8 @@ export default function WorkspaceHome() {
 
   return (
     <div className="scrollbar-thin h-full overflow-y-auto">
-      <div className="mx-auto max-w-5xl px-10 py-14">
-        <h1 className="text-3xl font-bold">{greeting()}, {me.display_name}님 👋</h1>
+      <div className="mx-auto max-w-5xl px-4 pb-24 pt-14 md:px-10">
+        <h1 className="text-2xl font-bold md:text-3xl">{greeting()}, {me.display_name}님 👋</h1>
         <p className="mt-1 text-muted">{workspace.icon} {workspace.name}</p>
 
         {recent.length > 0 && (

@@ -54,7 +54,7 @@ export function CommentsPanel({ pageId, onClose }: { pageId: string; onClose: ()
   const visible = items.filter((c) => showResolved || !c.resolved);
 
   return (
-    <aside className="flex h-full w-80 shrink-0 flex-col border-l border-line">
+    <aside className="fixed inset-0 z-[85] flex flex-col bg-background md:static md:z-auto md:h-full md:w-80 md:shrink-0 md:border-l md:border-line">
       <div className="flex items-center justify-between border-b border-line px-4 py-2.5">
         <span className="font-semibold">💬 댓글</span>
         <div className="flex items-center gap-2">
@@ -74,7 +74,7 @@ export function CommentsPanel({ pageId, onClose }: { pageId: string; onClose: ()
                 <Avatar profile={author} size={20} />
                 <span className="font-medium">{author?.display_name ?? "알 수 없음"}</span>
                 <span className="text-xs text-muted">{fmt(c.created_at)}</span>
-                <span className="ml-auto flex opacity-0 group-hover:opacity-100">
+                <span className="ml-auto flex touch-show opacity-0 group-hover:opacity-100">
                   {(canEdit || c.user_id === me.id) && (
                     <button title={c.resolved ? "다시 열기" : "해결"} className="rounded p-1 hover:bg-hover"
                       onClick={() => sb.from("comments").update({ resolved: !c.resolved }).eq("id", c.id)}>

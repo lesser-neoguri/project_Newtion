@@ -249,11 +249,11 @@ function TableView({ schema, rows, updateRow, addRow, addOption, onSchemaChange 
                 <div className="flex items-center gap-1">
                   <TitleInput value={r.title} canEdit={canEdit} onCommit={(title) => updateRow(r.id, { title })} />
                   <Link href={`/w/${workspace.id}/p/${r.id}`}
-                    className="flex shrink-0 items-center gap-1 rounded border border-line px-1.5 py-0.5 text-xs text-muted opacity-0 hover:bg-hover group-hover:opacity-100">
+                    className="flex shrink-0 items-center gap-1 rounded border border-line px-1.5 py-0.5 text-xs text-muted touch-show opacity-0 hover:bg-hover group-hover:opacity-100">
                     <FileText size={12} /> 열기
                   </Link>
                   {canEdit && (
-                    <button title="삭제" onClick={() => void setArchived(sb, r.id, true)} className="shrink-0 rounded p-1 text-muted opacity-0 hover:bg-hover group-hover:opacity-100">
+                    <button title="삭제" onClick={() => void setArchived(sb, r.id, true)} className="shrink-0 rounded p-1 text-muted touch-show opacity-0 hover:bg-hover group-hover:opacity-100">
                       <Trash2 size={12} />
                     </button>
                   )}

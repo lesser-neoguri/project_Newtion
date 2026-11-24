@@ -65,7 +65,7 @@ export function Sidebar({ onCollapse }: { onCollapse: () => void }) {
   const favPages = pages.filter((p) => favorites.has(p.id));
 
   return (
-    <aside className="flex h-full w-64 shrink-0 flex-col border-r border-line bg-sidebar text-sm">
+    <aside className="flex h-full w-full shrink-0 flex-col border-r border-line bg-sidebar text-sm md:w-64">
       {/* Workspace switcher */}
       <div className="relative flex items-center gap-1 p-2">
         <button onClick={() => setWsMenu((v) => !v)} className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 hover:bg-hover">
@@ -113,7 +113,7 @@ export function Sidebar({ onCollapse }: { onCollapse: () => void }) {
         <Section
           title="페이지"
           action={canEdit ? (
-            <button title="새 페이지" onClick={() => newPage(null)} className="rounded p-0.5 text-muted opacity-0 hover:bg-hover group-hover:opacity-100">
+            <button title="새 페이지" onClick={() => newPage(null)} className="rounded p-0.5 text-muted touch-show opacity-0 hover:bg-hover group-hover:opacity-100">
               <Plus size={14} />
             </button>
           ) : null}
@@ -249,7 +249,7 @@ function TreeItem({
             ))}
           </span>
         )}
-        <div className="flex items-center opacity-0 group-hover/item:opacity-100">
+        <div className="flex items-center touch-show opacity-0 group-hover/item:opacity-100">
           <button onClick={() => setMenu(true)} className="rounded p-0.5 text-muted hover:bg-hover">
             <MoreHorizontal size={14} />
           </button>

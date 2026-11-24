@@ -15,6 +15,8 @@ Next.js 16 · Supabase (Postgres / Auth / Realtime / Storage) · BlockNote + Yjs
 | 💬 댓글 | 페이지별 댓글, 해결 처리, 실시간 반영 |
 | 🔑 로그인 | GitHub, Google 계정, 이메일+비밀번호, 메일 링크(비밀번호 없이) |
 | 🔐 권한 | 소유자 / 편집자 / 뷰어. 이메일로 초대 (미가입자는 가입 시 자동 참여). 모든 테이블에 RLS 적용 |
+| 🤖 문서 도우미 | 오른쪽 아래 버튼. 이 페이지 / 하위 포함 / 워크스페이스 전체 범위의 문서를 바탕으로 Claude가 답변 (`ANTHROPIC_API_KEY` 필요) |
+| 📱 모바일 | 서랍형 사이드바, 터치용 버튼 표시, 전체 화면 챗봇·댓글 |
 | 🔎 검색 | `⌘K` / `Ctrl+K` |
 | 🖼️ 업로드 | 에디터 이미지/파일 업로드는 Supabase Storage `uploads` 버킷에 저장 |
 
@@ -75,6 +77,7 @@ npm run dev
 1. Vercel에서 **Add New → Project**로 이 GitHub 저장소를 Import 합니다. (Next.js가 자동 감지됨)
 2. Environment Variables를 추가합니다.
    - `NEXT_PUBLIC_SUPABASE_URL`
+   - `ANTHROPIC_API_KEY`: 문서 도우미(Claude)용. *Sensitive*로 등록하세요. 서버에서만 사용됩니다.
    - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (Supabase → Project Settings → API Keys의 publishable key. 예전 `anon` 키도 동작)
 3. Deploy를 누른 뒤, 배포된 도메인을 Supabase Auth의 Site URL / Redirect URLs에 등록합니다.
 

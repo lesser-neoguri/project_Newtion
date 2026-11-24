@@ -38,7 +38,7 @@ export function Popover({
   return (
     <div
       ref={ref}
-      className={`absolute top-full z-50 mt-1 min-w-48 rounded-lg border border-line bg-background p-1 shadow-xl ${
+      className={`absolute top-full z-50 mt-1 min-w-48 max-w-[calc(100vw-1.5rem)] rounded-lg border border-line bg-background p-1 shadow-xl ${
         align === "right" ? "right-0" : "left-0"
       } ${className}`}
     >
@@ -73,7 +73,7 @@ export function Modal({ open, onClose, children, wide }: { open: boolean; onClos
   useClickOutside(ref, onClose, open);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[100] flex items-start justify-center bg-black/40 px-4 pt-[10vh]">
+    <div className="fixed inset-0 z-[100] flex items-start justify-center bg-black/40 px-3 pt-[6vh] md:px-4 md:pt-[10vh]">
       <div
         ref={ref}
         className={`max-h-[80vh] w-full overflow-hidden rounded-xl border border-line bg-background shadow-2xl ${

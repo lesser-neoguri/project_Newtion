@@ -45,7 +45,7 @@ export default function SettingsPage() {
 
   return (
     <div className="scrollbar-thin h-full overflow-y-auto">
-      <div className="mx-auto max-w-3xl space-y-6 px-10 py-14">
+      <div className="mx-auto max-w-3xl space-y-6 px-4 pb-24 pt-14 md:px-10">
         <h1 className="text-3xl font-bold">설정 및 멤버</h1>
         {msg && <div className="rounded-md bg-accent/10 px-3 py-2 text-sm text-accent">{msg}</div>}
 
@@ -80,8 +80,8 @@ export default function SettingsPage() {
         <section className={card}>
           <h2 className="mb-3 font-semibold">멤버 ({members.length})</h2>
           {isOwner && (
-            <form onSubmit={invite} className="mb-4 flex gap-2">
-              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="초대할 이메일" className={`${input} flex-1`} />
+            <form onSubmit={invite} className="mb-4 flex flex-wrap gap-2">
+              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="초대할 이메일" className={`${input} min-w-0 flex-1 basis-full sm:basis-auto`} />
               <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as Role)} className={`${input} bg-background`}>
                 <option value="editor">편집자</option>
                 <option value="viewer">뷰어</option>
@@ -92,7 +92,7 @@ export default function SettingsPage() {
           )}
           <div className="divide-y divide-line">
             {members.map((m) => (
-              <div key={m.user_id} className="flex items-center gap-3 py-2">
+              <div key={m.user_id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
                 <Avatar profile={m.profile} size={32} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium">{m.profile.display_name} {m.user_id === me.id && <span className="text-muted">(나)</span>}</div>

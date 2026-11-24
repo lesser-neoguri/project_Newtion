@@ -151,7 +151,7 @@ function EditorInner({
       editor={editor}
       editable={editable}
       theme={theme}
-      className="-mx-12 min-h-[40vh] pb-32"
+      className="min-h-[40vh] pb-32 md:-mx-[54px]"
     />
   );
 }

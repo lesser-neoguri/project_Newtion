@@ -130,8 +130,8 @@ export function TemplateGallery({ parentId, onDone, compact }: { parentId: strin
   }
 
   return (
-    <div className="flex h-[70vh]">
-      <div className="w-64 shrink-0 overflow-y-auto border-r border-line p-2">
+    <div className="flex h-[75dvh] flex-col md:h-[70vh] md:flex-row">
+      <div className="max-h-44 shrink-0 overflow-y-auto border-b border-line p-2 md:max-h-none md:w-64 md:border-b-0 md:border-r">
         {categories.map((c) => (
           <div key={c} className="mb-3">
             <div className="px-2 py-1 text-xs font-semibold text-muted">{c}</div>
@@ -145,7 +145,7 @@ export function TemplateGallery({ parentId, onDone, compact }: { parentId: strin
           </div>
         ))}
       </div>
-      <div className="flex flex-1 flex-col overflow-y-auto p-6">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 md:p-6">
         <div className="text-4xl">{selected.page.icon}</div>
         <h2 className="mt-2 text-2xl font-bold">{selected.name}</h2>
         <p className="mt-2 text-muted">{selected.description}</p>

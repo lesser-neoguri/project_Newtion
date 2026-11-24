@@ -125,10 +125,10 @@ export function PageView({ pageId }: { pageId: string }) {
     <div className="flex h-full">
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Top bar */}
-        <header className="flex h-11 shrink-0 items-center gap-2 px-3 text-sm">
+        <header className="flex h-11 shrink-0 items-center gap-1 pl-11 pr-2 text-sm md:gap-2 md:px-3">
           <nav className="flex min-w-0 flex-1 items-center gap-0.5 text-muted">
             {crumbs.map((c) => (
-              <span key={c.id} className="flex min-w-0 items-center gap-0.5">
+              <span key={c.id} className="hidden min-w-0 items-center gap-0.5 md:flex">
                 <Link href={`/w/${workspace.id}/p/${c.id}`} className="truncate rounded px-1.5 py-0.5 hover:bg-hover">
                   {c.icon} {c.title || "제목 없음"}
                 </Link>
@@ -136,7 +136,7 @@ export function PageView({ pageId }: { pageId: string }) {
               </span>
             ))}
             {parentDb && (
-              <span className="flex min-w-0 items-center gap-0.5">
+              <span className="hidden min-w-0 items-center gap-0.5 md:flex">
                 <Link href={`/w/${workspace.id}/p/${parentDb.id}`} className="truncate rounded px-1.5 py-0.5 hover:bg-hover">
                   {parentDb.icon} {parentDb.title}
                 </Link>
@@ -211,9 +211,9 @@ export function PageView({ pageId }: { pageId: string }) {
         <div className="scrollbar-thin flex-1 overflow-y-auto">
           {/* Cover */}
           {page.cover && (
-            <div className="group relative h-48 w-full" style={{ background: page.cover }}>
+            <div className="group relative h-32 w-full md:h-48" style={{ background: page.cover }}>
               {editable && (
-                <div className="absolute bottom-2 right-4 flex gap-1 opacity-0 group-hover:opacity-100">
+                <div className="absolute bottom-2 right-4 flex gap-1 touch-show opacity-0 group-hover:opacity-100">
                   <button onClick={() => patch({ cover: COVERS[(COVERS.indexOf(page.cover!) + 1) % COVERS.length] })}
                     className="rounded bg-background/80 px-2 py-1 text-xs hover:bg-background">커버 변경</button>
                   <button onClick={() => patch({ cover: null })} className="rounded bg-background/80 px-2 py-1 text-xs hover:bg-background">제거</button>
@@ -222,15 +222,15 @@ export function PageView({ pageId }: { pageId: string }) {
             </div>
           )}
 
-          <div className={`mx-auto px-12 ${page.kind === "database" ? "max-w-6xl" : "max-w-3xl"}`}>
+          <div className={`mx-auto px-4 md:px-12 ${page.kind === "database" ? "max-w-6xl" : "max-w-3xl"}`}>
             {/* Icon */}
-            <div className={`group relative ${page.cover ? "-mt-10" : "pt-16"}`}>
+            <div className={`group relative ${page.cover ? "-mt-8 md:-mt-10" : "pt-6 md:pt-16"}`}>
               {page.icon && (
-                <button disabled={!editable} onClick={() => setIconPicker(true)} className="rounded-lg text-7xl leading-none hover:bg-hover">
+                <button disabled={!editable} onClick={() => setIconPicker(true)} className="rounded-lg text-6xl leading-none hover:bg-hover md:text-7xl">
                   {page.icon}
                 </button>
               )}
-              <div className={`flex gap-1 pt-2 text-sm text-muted opacity-0 transition group-hover:opacity-100 ${editable ? "" : "hidden"}`}>
+              <div className={`flex gap-1 pt-2 text-sm text-muted touch-show opacity-0 transition group-hover:opacity-100 ${editable ? "" : "hidden"}`}>
                 {!page.icon && (
                   <button onClick={() => setIconPicker(true)} className="flex items-center gap-1 rounded px-2 py-1 hover:bg-hover"><Smile size={14} /> 아이콘 추가</button>
                 )}
@@ -254,7 +254,7 @@ export function PageView({ pageId }: { pageId: string }) {
               <div className="mb-4 space-y-0.5 border-b border-line pb-4">
                 {schemaForRow.properties.map((p) => (
                   <div key={p.id} className="flex items-start text-sm">
-                    <div className="w-40 shrink-0 truncate px-2 py-1.5 text-muted">{p.name}</div>
+                    <div className="w-28 shrink-0 truncate px-2 py-1.5 text-muted md:w-40">{p.name}</div>
                     <div className="min-w-0 flex-1">
                       <PropertyCell prop={p} value={page.properties[p.id]} members={ws.members} canEdit={editable}
                         onAddOption={addRowOption} onChange={(v) => setRowProp(p.id, v)} />
@@ -311,7 +311,7 @@ function TitleArea({ value, editable, onChange }: { value: string; editable: boo
       value={value}
       onChange={(e) => onChange(e.target.value.replace(/\n/g, ""))}
       placeholder="제목 없음"
-      className="mb-2 mt-3 w-full resize-none overflow-hidden bg-transparent text-4xl font-bold leading-tight outline-none placeholder:text-foreground/20"
+      className="mb-2 mt-3 w-full resize-none overflow-hidden bg-transparent text-3xl font-bold leading-tight outline-none md:text-4xl placeholder:text-foreground/20"
     />
   );
 }

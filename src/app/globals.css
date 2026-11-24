@@ -48,7 +48,6 @@ body {
 /* BlockNote tweaks so the editor blends with the page */
 .bn-container .bn-editor {
   background: transparent !important;
-  padding-inline: 0 !important;
 }
 .bn-container {
   --bn-colors-editor-background: transparent;
@@ -62,4 +61,27 @@ body {
 .scrollbar-thin::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 4px;
+}
+
+/* Controls that only appear on hover must stay visible on touch screens. */
+@media (hover: none) {
+  .touch-show {
+    opacity: 1 !important;
+  }
+}
+
+/* Mobile: keep BlockNote's side menu space small so text isn't squeezed. */
+@media (max-width: 767px) {
+  .bn-container .bn-editor {
+    padding-inline: 0 !important;
+  }
+}
+
+/* iOS Safari zooms into inputs smaller than 16px on focus. */
+@media (max-width: 767px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
 }
