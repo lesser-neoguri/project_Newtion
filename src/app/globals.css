@@ -80,7 +80,7 @@ body {
 /* iOS Safari zooms into inputs smaller than 16px on focus. */
 @media (max-width: 767px) {
   input,
-  textarea,
+  textarea:not(.page-title),
   select {
     font-size: 16px !important;
   }

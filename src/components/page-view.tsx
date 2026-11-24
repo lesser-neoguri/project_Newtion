@@ -13,7 +13,7 @@ import { Avatar, EmojiPicker, MenuItem, Popover, Spinner } from "./ui";
 import { DatabaseView } from "./database-view";
 import { PropertyCell } from "./property-cell";
 import { CommentsPanel } from "./comments";
-import { TidyPanel } from "./tidy-panel";
+import { TidyBar, TidyReview, useTidy } from "./tidy";
 import type { BlockNoteEditor } from "./editor";
 import { createPage, deleteForever, setArchived } from "@/lib/api";
 import { COVERS, type DbSchema, type Page, type PageMeta, type PropValue, type PropOption } from "@/lib/types";
@@ -31,8 +31,8 @@ export function PageView({ pageId }: { pageId: string }) {
   const [saveState, setSaveState] = useState<"saving" | "saved" | "error" | null>(null);
   const [menu, setMenu] = useState(false);
   const [iconPicker, setIconPicker] = useState(false);
-  const [showTidy, setShowTidy] = useState(false);
   const [editor, setEditor] = useState<BlockNoteEditor | null>(null);
+  const tidy = useTidy(editor, pageId, page?.title ?? "");
 
   // Load page
   useEffect(() => {
@@ -167,9 +167,9 @@ export function PageView({ pageId }: { pageId: string }) {
             ))}
           </div>
           {editable && page.kind !== "database" && (
-            <button title="문서 정리 (AI)" onClick={() => setShowTidy((v) => !v)} className={`flex items-center gap-1 rounded p-1.5 hover:bg-hover ${showTidy ? "bg-hover" : ""}`}>
+            <button title="문서 정리 (AI)" onClick={() => (tidy.open ? tidy.close() : tidy.setOpen(true))} className={`flex items-center gap-1 rounded p-1.5 hover:bg-hover ${tidy.open ? "bg-hover text-purple-600" : ""}`}>
               <Wand2 size={16} />
-              <span className="hidden text-xs lg:inline">정리</span>
+              <span className="hidden text-xs lg:inline">AI 정리</span>
             </button>
           )}
           <button title="댓글" onClick={() => setShowComments((v) => !v)} className={`rounded p-1.5 hover:bg-hover ${showComments ? "bg-hover" : ""}`}>
@@ -288,6 +288,8 @@ export function PageView({ pageId }: { pageId: string }) {
               ) : null
             ) : (
               <>
+                {/* Editor stays mounted while reviewing so Apply can write through it. */}
+                <div className={tidy.reviewing ? "hidden" : ""}>
                 <CollaborativeEditor
                   sb={sb}
                   pageId={pageId}
@@ -302,13 +304,13 @@ export function PageView({ pageId }: { pageId: string }) {
                 {page.kind === "doc" && (
                   <SubPages pageId={pageId} childPages={childPages} canEdit={editable} />
                 )}
+                </div>
+                {tidy.reviewing && <TidyReview tidy={tidy} />}
               </>
             )}
           </div>
         </div>
-        {showTidy && editable && page.kind !== "database" && (
-          <TidyPanel editor={editor} pageId={pageId} pageTitle={page.title} onClose={() => setShowTidy(false)} />
-        )}
+        {editable && page.kind !== "database" && <TidyBar tidy={tidy} />}
       </div>
       {showComments && <CommentsPanel pageId={pageId} onClose={() => setShowComments(false)} />}
     </div>
@@ -329,7 +331,7 @@ function TitleArea({ value, editable, onChange }: { value: string; editable: boo
       value={value}
       onChange={(e) => onChange(e.target.value.replace(/\n/g, ""))}
       placeholder="제목 없음"
-      className="mb-2 mt-3 w-full resize-none overflow-hidden bg-transparent text-3xl font-bold leading-tight outline-none md:text-4xl placeholder:text-foreground/20"
+      className="page-title mb-2 mt-3 w-full resize-none overflow-hidden bg-transparent text-3xl font-bold leading-tight outline-none md:text-4xl placeholder:text-foreground/20"
     />
   );
 }

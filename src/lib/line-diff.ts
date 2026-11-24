@@ -67,3 +67,72 @@ export function withContext(lines: DiffLine[], context = 3): DiffRow[] {
   if (skipped) rows.push({ type: "skip", count: skipped });
   return rows;
 }
+
+export type WordSeg = { type: "same" | "add" | "del"; text: string };
+
+/** Word-level diff of two strings (keeps whitespace/punctuation as tokens). */
+export function diffWords(a: string, b: string): WordSeg[] {
+  const tok = (s: string) => s.match(/\s+|[.,!?;:()[\]{}"'`·~]|[^\s.,!?;:()[\]{}"'`·~]+/g) ?? [];
+  const A = tok(a), B = tok(b);
+  const n = A.length, m = B.length;
+  const dp: Uint16Array[] = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+  for (let i = n - 1; i >= 0; i--)
+    for (let j = m - 1; j >= 0; j--)
+      dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const out: WordSeg[] = [];
+  const push = (type: WordSeg["type"], text: string) => {
+    const last = out[out.length - 1];
+    if (last && last.type === type) last.text += text;
+    else out.push({ type, text });
+  };
+  let i = 0, j = 0;
+  while (i < n || j < m) {
+    if (i < n && j < m && A[i] === B[j]) { push("same", A[i]); i++; j++; }
+    else if (i < n && (j >= m || dp[i + 1][j] >= dp[i][j + 1])) { push("del", A[i]); i++; }
+    else { push("add", B[j]); j++; }
+  }
+  // Show deletions before additions inside a changed run ("old → new" reading order).
+  for (let k = 0; k + 1 < out.length; k++) {
+    if (out[k].type === "add" && out[k + 1].type === "del") [out[k], out[k + 1]] = [out[k + 1], out[k]];
+  }
+  // Refine "word → word'" replacements to character level when the words overlap,
+  // so Korean ending changes (결정함 → 결정했다) only mark the changed syllables.
+  const refined: WordSeg[] = [];
+  for (let k = 0; k < out.length; k++) {
+    const d = out[k], a = out[k + 1];
+    if (d.type === "del" && a?.type === "add" && !/\s/.test(d.text + a.text) && d.text.length <= 40 && a.text.length <= 40) {
+      const chars = diffChars(d.text, a.text);
+      const same = chars.filter((c) => c.type === "same").reduce((n, c) => n + c.text.length, 0);
+      if (same > 0 && same >= Math.min(d.text.length, a.text.length) / 2) {
+        refined.push(...chars);
+        k++;
+        continue;
+      }
+    }
+    refined.push(d);
+  }
+  // Merge neighbours of the same type created by refinement.
+  return refined.reduce<WordSeg[]>((acc, seg) => {
+    const last = acc[acc.length - 1];
+    if (last && last.type === seg.type) last.text += seg.text;
+    else acc.push({ ...seg });
+    return acc;
+  }, []);
+}
+
+function diffChars(a: string, b: string): WordSeg[] {
+  const A = [...a], B = [...b];
+  const n = A.length, m = B.length;
+  const dp: Uint16Array[] = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+  for (let i = n - 1; i >= 0; i--)
+    for (let j = m - 1; j >= 0; j--)
+      dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const out: WordSeg[] = [];
+  let i = 0, j = 0;
+  while (i < n || j < m) {
+    if (i < n && j < m && A[i] === B[j]) { out.push({ type: "same", text: A[i] }); i++; j++; }
+    else if (i < n && (j >= m || dp[i + 1][j] >= dp[i][j + 1])) { out.push({ type: "del", text: A[i] }); i++; }
+    else { out.push({ type: "add", text: B[j] }); j++; }
+  }
+  return out;
+}
