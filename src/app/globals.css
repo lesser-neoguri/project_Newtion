@@ -106,11 +106,24 @@ body.tidy-open .chat-fab {
   body {
     overscroll-behavior: none;
   }
-  /* Docked editor toolbar: scroll sideways instead of wrapping into several rows. */
+  /* Docked editor toolbar: a full-width bar sitting directly on the keyboard. */
+  .bn-mobile-formatting-toolbar {
+    /* The keyboard is open whenever this shows, so the home-indicator inset doesn't
+       apply; BlockNote's padding left a see-through gap between toolbar and keyboard. */
+    padding-bottom: 0 !important;
+    justify-content: flex-start !important;
+    background: var(--background);
+    border-top: 1px solid var(--border);
+  }
   .bn-mobile-formatting-toolbar .bn-toolbar {
+    width: 100vw;
     max-width: 100vw;
     overflow-x: auto;
     flex-wrap: nowrap;
     scrollbar-width: none;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: transparent !important;
   }
 }

@@ -203,6 +203,56 @@ function EditorInner({
     };
   }, [doc, provider, editor, editable, sb, pageId, onSaveState]);
 
+  // Phones: keep the caret / selection above the docked toolbar while the keyboard is open.
+  useEffect(() => {
+    if (!coarse) return;
+    const view = editor.prosemirrorView;
+    if (!view) return;
+    // ProseMirror's own scroll-into-view (typing, Enter) leaves room for the toolbar too.
+    view.setProps({
+      scrollMargin: { top: 64, bottom: 140, left: 0, right: 0 },
+      scrollThreshold: { top: 64, bottom: 140, left: 0, right: 0 },
+    });
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const keepVisible = () => {
+      const vv = window.visualViewport;
+      if (!vv || window.innerHeight - vv.height * vv.scale < 150) return; // keyboard closed
+      const sel = window.getSelection();
+      if (!sel || !sel.rangeCount || !view.dom.contains(sel.focusNode)) return;
+      // Measure where the selection ends (the caret / the handle the user is moving).
+      const range = document.createRange();
+      range.setStart(sel.focusNode!, sel.focusOffset);
+      range.collapse(true);
+      let rect = range.getBoundingClientRect();
+      if (!rect.height) {
+        const el = (sel.focusNode instanceof Element ? sel.focusNode : sel.focusNode?.parentElement) as Element | null;
+        if (!el) return;
+        rect = el.getBoundingClientRect();
+      }
+      const scroller = view.dom.closest(".overflow-y-auto") as HTMLElement | null;
+      if (!scroller) return;
+      const box = scroller.getBoundingClientRect();
+      const bar = document.querySelector(".bn-mobile-formatting-toolbar")?.getBoundingClientRect().height ?? 48;
+      const top = Math.max(box.top, vv.offsetTop) + 12;
+      const bottom = Math.min(box.bottom, vv.offsetTop + vv.height) - bar - 16;
+      if (rect.bottom > bottom) scroller.scrollBy({ top: rect.bottom - bottom, behavior: "smooth" });
+      else if (rect.top < top) scroller.scrollBy({ top: rect.top - top, behavior: "smooth" });
+    };
+    const schedule = (delay = 120) => {
+      clearTimeout(timer);
+      timer = setTimeout(keepVisible, delay);
+    };
+    const unsubscribe = editor.onSelectionChange(() => schedule());
+    const onResize = () => schedule(250); // keyboard opening / closing
+    window.visualViewport?.addEventListener("resize", onResize);
+    return () => {
+      clearTimeout(timer);
+      unsubscribe();
+      window.visualViewport?.removeEventListener("resize", onResize);
+    };
+  }, [coarse, editor]);
+
   const toolbar = useCallback(
     () => (
       <FormattingToolbar>
