@@ -319,11 +319,28 @@ begin
 end;
 $$;
 
-revoke execute on function public.create_workspace(text, text) from anon;
-revoke execute on function public.invite_member(uuid, text, public.member_role) from anon;
-revoke execute on function public.accept_invites() from anon;
-revoke execute on function public.set_page_archived(uuid, boolean) from anon;
-revoke execute on function public.set_row_property(uuid, text, jsonb) from anon;
+-- Only signed-in users may call the RPCs / helpers (Supabase grants EXECUTE to PUBLIC and anon by default)
+revoke execute on function public.create_workspace(text, text) from public, anon;
+revoke execute on function public.invite_member(uuid, text, public.member_role) from public, anon;
+revoke execute on function public.accept_invites() from public, anon;
+revoke execute on function public.set_page_archived(uuid, boolean) from public, anon;
+revoke execute on function public.set_row_property(uuid, text, jsonb) from public, anon;
+revoke execute on function public.is_member(uuid) from public, anon;
+revoke execute on function public.can_edit(uuid) from public, anon;
+revoke execute on function public.is_owner(uuid) from public, anon;
+revoke execute on function public.shares_workspace(uuid) from public, anon;
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
+grant execute on function
+  public.create_workspace(text, text),
+  public.invite_member(uuid, text, public.member_role),
+  public.accept_invites(),
+  public.set_page_archived(uuid, boolean),
+  public.set_row_property(uuid, text, jsonb),
+  public.is_member(uuid),
+  public.can_edit(uuid),
+  public.is_owner(uuid),
+  public.shares_workspace(uuid)
+to authenticated;
 
 -- ---------------------------------------------------------------------
 -- Row Level Security
