@@ -2,9 +2,18 @@
 
 import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import * as Y from "yjs";
-import { useCreateBlockNote } from "@blocknote/react";
+import {
+  FormattingToolbar,
+  FormattingToolbarController,
+  MobileFormattingToolbarController,
+  getFormattingToolbarItems,
+  useBlockNoteEditor,
+  useComponentsContext,
+  useCreateBlockNote,
+} from "@blocknote/react";
+import { Sparkles } from "lucide-react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { withCollaboration } from "@blocknote/core/yjs";
 import { ko } from "@blocknote/core/locales";
@@ -12,6 +21,7 @@ import type { BlockNoteEditor, PartialBlock } from "@blocknote/core";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { SupabaseYProvider, fromB64, toB64 } from "@/lib/yjs-supabase";
 import { uploadFile } from "@/lib/api";
+import { selectionToAttachment, type SelectionAttachment } from "@/lib/selection";
 import type { Profile } from "@/lib/types";
 
 interface Props {
@@ -25,9 +35,46 @@ interface Props {
   onSaveState?: (s: "saving" | "saved" | "error") => void;
   /** Receives the editor instance once mounted (null on unmount). */
   onEditor?: (editor: BlockNoteEditor | null) => void;
+  /** Called when the user sends the current selection to the AI. */
+  onAskAI?: (attachment: SelectionAttachment) => void;
+}
+
+/** True on phones/tablets (touch as the main input). */
+export function useCoarsePointer() {
+  const [coarse, setCoarse] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(pointer: coarse)");
+    setCoarse(mq.matches);
+    const fn = (e: MediaQueryListEvent) => setCoarse(e.matches);
+    mq.addEventListener("change", fn);
+    return () => mq.removeEventListener("change", fn);
+  }, []);
+  return coarse;
+}
+
+/** Toolbar button: attach the selected blocks to the AI bar. */
+function AskAIButton({ onAsk }: { onAsk: (a: SelectionAttachment) => void }) {
+  const editor = useBlockNoteEditor();
+  const Components = useComponentsContext();
+  if (!Components) return null;
+  return (
+    <Components.FormattingToolbar.Button
+      mainTooltip="선택한 부분을 AI에게 보내기"
+      label="AI에게"
+      onClick={() => {
+        const a = selectionToAttachment(editor as unknown as BlockNoteEditor, true);
+        if (a) onAsk(a);
+      }}
+    >
+      <span className="flex items-center gap-1 px-0.5 text-[13px] font-medium">
+        <Sparkles size={14} /> AI
+      </span>
+    </Components.FormattingToolbar.Button>
+  );
 }
 
 export type { BlockNoteEditor };
+export type { SelectionAttachment } from "@/lib/selection";
 
 /** Sets up the Y.Doc + realtime provider for a page, then renders the editor. */
 export default function CollaborativeEditor(props: Props) {
@@ -83,9 +130,10 @@ function useColorScheme() {
 }
 
 function EditorInner({
-  sb, pageId, workspaceId, initialContent, me, editable, onSaveState, onEditor, doc, provider,
+  sb, pageId, workspaceId, initialContent, me, editable, onSaveState, onEditor, onAskAI, doc, provider,
 }: Props & { doc: Y.Doc; provider: SupabaseYProvider }) {
   const theme = useColorScheme();
+  const coarse = useCoarsePointer();
   const fragment = doc.getXmlFragment("document-store");
 
   const editor = useCreateBlockNote(
@@ -155,12 +203,31 @@ function EditorInner({
     };
   }, [doc, provider, editor, editable, sb, pageId, onSaveState]);
 
+  const toolbar = useCallback(
+    () => (
+      <FormattingToolbar>
+        {editable && onAskAI ? [<AskAIButton key="ask-ai" onAsk={onAskAI} />, ...getFormattingToolbarItems()] : getFormattingToolbarItems()}
+      </FormattingToolbar>
+    ),
+    [editable, onAskAI],
+  );
+
   return (
     <BlockNoteView
       editor={editor}
       editable={editable}
       theme={theme}
+      formattingToolbar={false}
+      // Drag handles are easy to trigger by accident on touch screens and crowd narrow pages.
+      sideMenu={!coarse}
       className="min-h-[40vh] pb-32 md:-mx-[54px]"
-    />
+    >
+      {coarse ? (
+        // Phones: always dock the toolbar above the keyboard instead of floating over the selection.
+        <MobileFormattingToolbarController formattingToolbar={toolbar} />
+      ) : (
+        <FormattingToolbarController formattingToolbar={toolbar} />
+      )}
+    </BlockNoteView>
   );
 }

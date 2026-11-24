@@ -20,7 +20,7 @@ export default function WorkspaceLayout({ children, params }: { children: React.
 
   return (
     <WorkspaceProvider workspaceId={wsId}>
-      <div className="flex h-dvh overflow-hidden">
+      <div className="ws-root flex h-dvh overflow-hidden">
         {/* Desktop sidebar */}
         {!collapsed && (
           <div className="hidden md:flex">

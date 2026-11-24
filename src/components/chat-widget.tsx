@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { Bot, Send, Trash2, X } from "lucide-react";
+import { Bot, MessageCircle, Paperclip, Send, Sparkles, Trash2, Wand2, X } from "lucide-react";
+import { usePageAiTools } from "@/lib/ai-hub";
 import { useWorkspace } from "./workspace-context";
 
 type Scope = "page" | "tree" | "workspace";
@@ -29,6 +30,26 @@ export function ChatWidget() {
   const params = useParams<{ pageId?: string }>();
   const pageId = params.pageId ?? null;
   const [open, setOpen] = useState(false);
+  const [menu, setMenu] = useState(false);
+  const [menuHasSelection, setMenuHasSelection] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const tools = usePageAiTools();
+  const keyboardOpen = useKeyboardOpen();
+
+  // Close the AI menu on outside tap / Escape.
+  useEffect(() => {
+    if (!menu) return;
+    const onDown = (e: PointerEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenu(false);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setMenu(false);
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menu]);
   const [scope, setScope] = useState<Scope>("tree");
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -103,14 +124,48 @@ export function ChatWidget() {
 
   return (
     <>
-      {!open && (
-        <button
-          onClick={() => setOpen(true)}
-          title="문서 도우미"
-          className="chat-fab fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-[90] flex h-14 w-14 items-center justify-center rounded-full bg-accent text-white shadow-lg transition hover:scale-105 hover:shadow-xl active:scale-95"
-        >
-          <Bot size={26} />
-        </button>
+      {!open && !keyboardOpen && (
+        <div ref={menuRef} className="chat-fab fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-[90] flex flex-col items-end gap-2">
+          {menu && (
+            <div className="w-64 overflow-hidden rounded-xl border border-line bg-background py-1 text-sm shadow-xl">
+              <div className="px-3 pb-1 pt-2 text-xs font-medium text-muted">AI</div>
+              <AiMenuItem
+                icon={<MessageCircle size={16} />}
+                title="문서에 질문하기"
+                desc="문서를 읽고 답해요"
+                onClick={() => { setMenu(false); setOpen(true); }}
+              />
+              {tools?.canEdit && (
+                <AiMenuItem
+                  icon={<Wand2 size={16} />}
+                  title="문서 정리"
+                  desc="맞춤법·중복·구조를 정리해요"
+                  onClick={() => { setMenu(false); tools.openTidy(); }}
+                />
+              )}
+              {tools?.canEdit && (
+                <AiMenuItem
+                  icon={<Paperclip size={16} />}
+                  title="선택한 부분 고치기"
+                  desc={menuHasSelection ? "드래그한 부분만 AI에게 보내요" : "먼저 문서에서 고칠 부분을 드래그하세요"}
+                  disabled={!menuHasSelection}
+                  onClick={() => { setMenu(false); tools.attachSelection(); }}
+                />
+              )}
+            </div>
+          )}
+          <button
+            onClick={() => {
+              if (!menu) setMenuHasSelection(!!tools?.hasSelection());
+              setMenu((v) => !v);
+            }}
+            title="AI"
+            aria-expanded={menu}
+            className="flex h-14 w-14 items-center justify-center rounded-full bg-accent text-white shadow-lg transition hover:scale-105 hover:shadow-xl active:scale-95"
+          >
+            {menu ? <X size={24} /> : <Sparkles size={24} />}
+          </button>
+        </div>
       )}
 
       {open && (
@@ -230,4 +285,36 @@ function TypingDots() {
       ))}
     </span>
   );
+}
+
+function AiMenuItem({
+  icon, title, desc, onClick, disabled,
+}: { icon: React.ReactNode; title: string; desc: string; onClick: () => void; disabled?: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className="flex w-full items-start gap-3 px-3 py-2 text-left hover:bg-hover disabled:cursor-default disabled:opacity-50 disabled:hover:bg-transparent"
+    >
+      <span className="mt-0.5 text-muted">{icon}</span>
+      <span className="min-w-0">
+        <span className="block font-medium">{title}</span>
+        <span className="block text-xs text-muted">{desc}</span>
+      </span>
+    </button>
+  );
+}
+
+/** True while an on-screen keyboard covers part of the screen (phones). */
+function useKeyboardOpen() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => setOpen(window.innerHeight - vv.height * vv.scale > 150);
+    update();
+    vv.addEventListener("resize", update);
+    return () => vv.removeEventListener("resize", update);
+  }, []);
+  return open;
 }

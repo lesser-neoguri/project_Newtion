@@ -1,8 +1,8 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, Check, RotateCcw, Sparkles, X } from "lucide-react";
-import type { BlockNoteEditor } from "./editor";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowRight, Check, Paperclip, RotateCcw, Sparkles, X } from "lucide-react";
+import type { BlockNoteEditor, SelectionAttachment } from "./editor";
 import { diffLines, diffWords, type DiffLine } from "@/lib/line-diff";
 import type { TidyMode, TidyResultT } from "@/app/api/tidy/route";
 
@@ -26,6 +26,10 @@ export function useTidy(editor: BlockNoteEditor | null, pageId: string, pageTitl
   const [result, setResult] = useState<TidyResult | null>(null);
   const [error, setError] = useState("");
   const [elapsed, setElapsed] = useState(0);
+  // Selected part of the document attached for the AI (like a file in a chat app).
+  const [attachment, setAttachment] = useState<SelectionAttachment | null>(null);
+  // Attachment the current result belongs to (kept while reviewing, even if the chip is removed).
+  const [runAttachment, setRunAttachment] = useState<SelectionAttachment | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -37,11 +41,26 @@ export function useTidy(editor: BlockNoteEditor | null, pageId: string, pageTitl
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  async function run() {
+  /** Attach a selection and open the bar (from the editor toolbar). */
+  const attach = useCallback((a: SelectionAttachment) => {
+    abortRef.current?.abort();
+    setAttachment(a);
+    setResult(null);
+    setError("");
+    setPhase("idle");
+    setOpen(true);
+  }, []);
+
+  async function run(overrideInstruction?: string) {
     if (!editor) return;
+    const instr = overrideInstruction ?? instruction;
+    if (overrideInstruction !== undefined) setInstruction(overrideInstruction);
     // Normalized so export quirks (BlockNote writes "* item") don't show up as "fixes".
     const md = normalizeMd(editor.blocksToMarkdownLossy(editor.document));
-    setOriginal(md);
+    const att = attachment;
+    const selection = att ? normalizeMd(att.markdown) : null;
+    setRunAttachment(att);
+    setOriginal(selection ?? md);
     setResult(null);
     setError("");
     setElapsed(0);
@@ -53,7 +72,7 @@ export function useTidy(editor: BlockNoteEditor | null, pageId: string, pageTitl
         method: "POST",
         headers: { "Content-Type": "application/json" },
         signal: ac.signal,
-        body: JSON.stringify({ pageId, markdown: md, mode, instruction, title: pageTitle }),
+        body: JSON.stringify({ pageId, markdown: md, mode, instruction: instr, title: pageTitle, selection }),
       });
       const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
       if (!res.ok) {
@@ -85,12 +104,31 @@ export function useTidy(editor: BlockNoteEditor | null, pageId: string, pageTitl
 
   function apply() {
     if (!editor || !result) return;
-    const current = normalizeMd(editor.blocksToMarkdownLossy(editor.document));
-    if (current !== original) {
-      const ok = confirm("정리를 시작한 뒤 문서가 바뀌었습니다 (다른 사람이 편집했을 수 있어요). 적용하면 그 변경 내용이 덮어써집니다. 계속할까요?");
-      if (!ok) return;
+    const blocks = editor.tryParseMarkdownToBlocks(result.markdown);
+    if (runAttachment) {
+      // Replace only the attached blocks.
+      const existing = runAttachment.blockIds.map((id) => editor.getBlock(id)).filter((b): b is NonNullable<typeof b> => !!b);
+      if (existing.length === 0) {
+        alert("선택했던 부분이 문서에서 사라졌습니다 (다른 사람이 지웠을 수 있어요). 다시 선택해 주세요.");
+        return;
+      }
+      const current = normalizeMd(editor.blocksToMarkdownLossy(existing));
+      if (existing.length !== runAttachment.blockIds.length || current !== original) {
+        const ok = confirm("선택한 부분이 그 사이 바뀌었습니다 (다른 사람이 편집했을 수 있어요). 적용하면 그 변경 내용이 덮어써집니다. 계속할까요?");
+        if (!ok) return;
+      }
+      editor.replaceBlocks(existing.map((b) => b.id), blocks);
+      setAttachment(null);
+      setRunAttachment(null);
+    } else {
+      const current = normalizeMd(editor.blocksToMarkdownLossy(editor.document));
+      if (current !== original) {
+        const ok = confirm("정리를 시작한 뒤 문서가 바뀌었습니다 (다른 사람이 편집했을 수 있어요). 적용하면 그 변경 내용이 덮어써집니다. 계속할까요?");
+        if (!ok) return;
+      }
+      editor.replaceBlocks(editor.document, blocks);
     }
-    editor.replaceBlocks(editor.document, editor.tryParseMarkdownToBlocks(result.markdown));
+    setInstruction("");
     setResult(null);
     setPhase("applied");
     setTimeout(() => {
@@ -103,11 +141,14 @@ export function useTidy(editor: BlockNoteEditor | null, pageId: string, pageTitl
     abortRef.current?.abort();
     setOpen(false);
     setResult(null);
+    setAttachment(null);
+    setRunAttachment(null);
     setPhase("idle");
   }
 
   return {
     open, setOpen, phase, mode, setMode, instruction, setInstruction, original, result, error, elapsed,
+    attachment, setAttachment, runAttachment, attach,
     run, cancel, discard, apply, close,
     reviewing: open && phase === "review" && !!result,
   };
@@ -468,7 +509,12 @@ export function TidyReview({ tidy }: { tidy: TidyState }) {
       <div className="mb-5 flex gap-3 rounded-lg bg-hover px-4 py-3 text-sm">
         <span className="leading-6">✨</span>
         <div className="min-w-0 flex-1 space-y-1.5">
-          <p className="leading-relaxed">{nothing ? "고칠 부분이 없었어요. 문서가 이미 잘 정리되어 있어요." : result.summary}</p>
+          {tidy.runAttachment && (
+            <div className="flex items-center gap-1.5 text-xs text-muted">
+              <Paperclip size={12} /> 선택한 부분만 바꿉니다{tidy.instruction ? ` · “${tidy.instruction.length > 40 ? tidy.instruction.slice(0, 40) + "…" : tidy.instruction}”` : ""}
+            </div>
+          )}
+          <p className="leading-relaxed">{nothing ? (tidy.runAttachment ? "선택한 부분에서 바꿀 곳이 없었어요." : "고칠 부분이 없었어요. 문서가 이미 잘 정리되어 있어요.") : result.summary}</p>
           {!nothing && (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
               <span>수정 {counts.changed}</span>
@@ -546,6 +592,16 @@ export function TidyReview({ tidy }: { tidy: TidyState }) {
 /* Notion-AI-style floating bar                                        */
 /* ------------------------------------------------------------------ */
 
+/** One-tap requests for an attached selection. */
+const QUICK: { label: string; prompt: string }[] = [
+  { label: "다듬기", prompt: "문장을 자연스럽고 읽기 쉽게 다듬어 주세요. 의미는 바꾸지 마세요." },
+  { label: "짧게", prompt: "핵심만 남기고 더 짧게 줄여 주세요." },
+  { label: "자세히", prompt: "문서의 다른 부분과 맥락에 맞게 더 자세히 풀어 써 주세요. 없는 사실은 지어내지 마세요." },
+  { label: "표로", prompt: "이 내용을 표로 정리해 주세요." },
+  { label: "목록으로", prompt: "이 내용을 항목별 목록으로 정리해 주세요." },
+  { label: "맞춤법만", prompt: "맞춤법과 띄어쓰기만 고쳐 주세요." },
+];
+
 const MODES: { id: TidyMode; label: string; desc: string }[] = [
   { id: "tidy", label: "전체 정리", desc: "맞춤법·중복·구조를 한 번에" },
   { id: "proofread", label: "맞춤법·문장", desc: "구조는 그대로, 문장만" },
@@ -569,8 +625,28 @@ export function TidyBar({ tidy }: { tidy: TidyState }) {
       >
         {(phase === "idle" || phase === "error") && (
           <div className="p-3">
+            {tidy.attachment && (
+              <div className="mb-2 flex items-center gap-2">
+                <span className="flex min-w-0 max-w-full items-center gap-1.5 rounded-md border border-line bg-hover px-2 py-1 text-xs">
+                  <Paperclip size={12} className="shrink-0 text-muted" />
+                  <span className="shrink-0 font-medium">선택한 부분{tidy.attachment.count > 1 ? ` · ${tidy.attachment.count}블록` : ""}</span>
+                  <span className="min-w-0 truncate text-muted">{tidy.attachment.preview}</span>
+                  <button title="첨부 빼기" onClick={() => tidy.setAttachment(null)} className="shrink-0 rounded p-0.5 text-muted hover:bg-background">
+                    <X size={12} />
+                  </button>
+                </span>
+              </div>
+            )}
             <div className="mb-2 flex gap-1.5 overflow-x-auto">
-              {MODES.map((m) => (
+              {tidy.attachment ? QUICK.map((q) => (
+                <button
+                  key={q.label}
+                  onClick={() => void tidy.run(q.prompt)}
+                  className="shrink-0 rounded-full border border-line px-3 py-1 text-xs text-foreground/80 hover:bg-hover"
+                >
+                  {q.label}
+                </button>
+              )) : MODES.map((m) => (
                 <button
                   key={m.id}
                   onClick={() => tidy.setMode(m.id)}
@@ -589,11 +665,11 @@ export function TidyBar({ tidy }: { tidy: TidyState }) {
                 autoFocus
                 value={tidy.instruction}
                 onChange={(e) => tidy.setInstruction(e.target.value)}
-                placeholder="AI에게 원하는 정리 방법을 알려주세요 (선택)"
+                placeholder={tidy.attachment ? "선택한 부분을 어떻게 바꿀까요?" : "AI에게 원하는 정리 방법을 알려주세요 (선택)"}
                 className="min-w-0 flex-1 bg-transparent py-1.5 text-sm outline-none placeholder:text-muted"
               />
               <button className="flex shrink-0 items-center gap-1 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white">
-                정리하기 <ArrowRight size={14} />
+                {tidy.attachment ? "보내기" : "정리하기"} <ArrowRight size={14} />
               </button>
               <button type="button" title="닫기" onClick={tidy.close} className="shrink-0 rounded p-1.5 text-muted hover:bg-hover">
                 <X size={16} />
@@ -607,7 +683,7 @@ export function TidyBar({ tidy }: { tidy: TidyState }) {
           <div className="flex items-center gap-3 p-3 text-sm">
             <Sparkles size={18} className="shrink-0 animate-pulse text-muted" />
             <span className="flex-1">
-              AI가 문서를 정리하고 있어요
+              {tidy.attachment ? "AI가 선택한 부분을 고치고 있어요" : "AI가 문서를 정리하고 있어요"}
               <span className="ml-1 inline-flex gap-0.5 align-middle">
                 {[0, 150, 300].map((d) => <span key={d} className="h-1 w-1 animate-bounce rounded-full bg-current" style={{ animationDelay: `${d}ms` }} />)}
               </span>

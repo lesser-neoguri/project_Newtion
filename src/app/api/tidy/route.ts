@@ -32,6 +32,14 @@ notes 작성법 (컴파일러 진단 메시지처럼):
 - code: 짧은 영문 코드 (예: SPELLING, DUPLICATE_MERGED, SECTION_MOVED, HEADING_LEVEL, LIST_FORMAT, TABLE_CREATED, CONTRADICTION, MISSING_INFO).
 - 바꿀 것이 없으면 원문을 그대로 돌려주고 notes는 비워 두세요.`;
 
+// Used when the user attached (selected) part of the document.
+const SELECTION_RULES = `
+선택 부분 모드:
+- 사용자가 문서의 일부를 <selection>으로 골라 보냈습니다. <document>는 앞뒤 맥락을 이해하기 위한 참고용이며 고치지 않습니다.
+- 요청에 따라 <selection> 부분만 고치세요. markdown 필드에는 문서 전체가 아니라, 선택 부분을 대신할 내용만 넣으세요. 길이는 요청에 따라 달라져도 됩니다.
+- 선택 부분 밖의 내용을 가져와 붙이거나, 선택 부분에 없던 사실을 지어내지 마세요. 문서의 다른 곳에 있는 정보와 어긋나는 점을 발견하면 notes에 "error"로 알려 주세요.
+- notes의 line은 돌려준 선택 부분 안에서의 줄 번호입니다.`;
+
 const TidyResult = z.object({
   markdown: z.string().describe("정리된 문서 전체 (Markdown)"),
   summary: z.string().describe("무엇을 바꿨는지 한두 문장 요약"),
@@ -53,13 +61,15 @@ function fail(status: number, message: string) {
 export async function POST(req: Request) {
   if (!process.env.ANTHROPIC_API_KEY) return fail(503, "ANTHROPIC_API_KEY가 설정되지 않았습니다.");
 
-  let body: { pageId?: string; markdown?: string; mode?: TidyMode; instruction?: string };
+  let body: { pageId?: string; markdown?: string; mode?: TidyMode; instruction?: string; selection?: string };
   try {
     body = await req.json();
   } catch {
     return fail(400, "잘못된 요청입니다.");
   }
   const { pageId, markdown, instruction } = body;
+  const selection = typeof body.selection === "string" && body.selection.trim() ? body.selection : null;
+  if (selection && selection.length > 30_000) return fail(413, "선택한 부분이 너무 깁니다. 3만 자 이하로 골라 주세요.");
   const mode: TidyMode = body.mode && body.mode in MODE_PROMPTS ? body.mode : "tidy";
   if (!pageId || typeof markdown !== "string") return fail(400, "잘못된 요청입니다.");
   if (!markdown.trim()) return fail(400, "정리할 내용이 없습니다.");
@@ -74,7 +84,14 @@ export async function POST(req: Request) {
   const { data: canEdit } = await sb.rpc("can_edit", { ws: page.workspace_id });
   if (!canEdit) return fail(403, "편집 권한이 없습니다.");
 
-  const userText = [
+  const userText = selection
+    ? [
+        `요청: ${instruction?.trim() ? instruction.trim().slice(0, 1000) : "선택 부분의 문장을 자연스럽게 다듬어 주세요."}`,
+        `문서 제목: ${page.title || "제목 없음"}`,
+        `<document>\n${markdown}\n</document>`,
+        `<selection>\n${selection}\n</selection>`,
+      ].join("\n\n")
+    : [
     `정리 방식: ${MODE_PROMPTS[mode]}`,
     instruction?.trim() ? `추가 요청: ${instruction.trim().slice(0, 1000)}` : "",
     `문서 제목: ${page.title || "제목 없음"}`,
@@ -91,7 +108,7 @@ export async function POST(req: Request) {
       output_config: { effort: "medium", format: betaZodOutputFormat(TidyResult) },
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
-      system: SYSTEM,
+      system: selection ? SYSTEM + "\n" + SELECTION_RULES : SYSTEM,
       messages: [{ role: "user", content: userText }],
     });
     const final = await stream.finalMessage();

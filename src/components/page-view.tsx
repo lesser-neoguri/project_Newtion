@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronRight, FileText, ImageIcon, Link2, MessageSquare, MoreHorizontal, Plus, Smile, Star, Table2, Trash2,
-  RotateCcw, LayoutTemplate, Wand2,
+  RotateCcw, LayoutTemplate,
 } from "lucide-react";
 import { useWorkspace } from "./workspace-context";
 import { Avatar, EmojiPicker, MenuItem, Popover, Spinner } from "./ui";
@@ -15,6 +15,8 @@ import { PropertyCell } from "./property-cell";
 import { CommentsPanel } from "./comments";
 import { TidyBar, TidyReview, useTidy } from "./tidy";
 import type { BlockNoteEditor } from "./editor";
+import { aiHub } from "@/lib/ai-hub";
+import { selectionToAttachment } from "@/lib/selection";
 import { createPage, deleteForever, setArchived } from "@/lib/api";
 import { COVERS, type DbSchema, type Page, type PageMeta, type PropValue, type PropOption } from "@/lib/types";
 
@@ -33,6 +35,26 @@ export function PageView({ pageId }: { pageId: string }) {
   const [iconPicker, setIconPicker] = useState(false);
   const [editor, setEditor] = useState<BlockNoteEditor | null>(null);
   const tidy = useTidy(editor, pageId, page?.title ?? "");
+  const { attach: tidyAttach, setOpen: setTidyOpen, setAttachment: setTidyAttachment } = tidy;
+  const aiEditable = !!page && canEdit && !page.archived_at && page.kind !== "database";
+
+  // Offer this page's AI actions to the floating AI button.
+  useEffect(() => {
+    if (!page || page.kind === "database") return;
+    aiHub.set({
+      pageId,
+      canEdit: aiEditable,
+      openTidy: () => { setTidyAttachment(null); setTidyOpen(true); },
+      hasSelection: () => !!editor?.getSelection()?.blocks?.length,
+      attachSelection: () => {
+        const a = editor ? selectionToAttachment(editor) : null;
+        if (!a) return false;
+        tidyAttach(a);
+        return true;
+      },
+    });
+    return () => aiHub.set(null);
+  }, [pageId, page?.kind, aiEditable, editor, tidyAttach, setTidyOpen, setTidyAttachment]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load page
   useEffect(() => {
@@ -166,12 +188,6 @@ export function PageView({ pageId }: { pageId: string }) {
               <Avatar key={v.user_id} ring size={24} profile={{ display_name: v.name, avatar_color: v.color, email: "" }} />
             ))}
           </div>
-          {editable && page.kind !== "database" && (
-            <button title="문서 정리 (AI)" onClick={() => (tidy.open ? tidy.close() : tidy.setOpen(true))} className={`flex items-center gap-1 rounded p-1.5 hover:bg-hover ${tidy.open ? "bg-hover" : ""}`}>
-              <Wand2 size={16} />
-              <span className="hidden text-xs lg:inline">AI 정리</span>
-            </button>
-          )}
           <button title="댓글" onClick={() => setShowComments((v) => !v)} className={`rounded p-1.5 hover:bg-hover ${showComments ? "bg-hover" : ""}`}>
             <MessageSquare size={16} />
           </button>
@@ -300,6 +316,7 @@ export function PageView({ pageId }: { pageId: string }) {
                   editable={editable}
                   onSaveState={setSaveState}
                   onEditor={setEditor}
+                  onAskAI={tidy.attach}
                 />
                 {page.kind === "doc" && (
                   <SubPages pageId={pageId} childPages={childPages} canEdit={editable} />
