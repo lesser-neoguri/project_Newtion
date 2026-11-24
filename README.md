@@ -13,7 +13,7 @@ Next.js 16 · Supabase (Postgres / Auth / Realtime / Storage) · BlockNote + Yjs
 | 🌲 페이지 트리 | 무제한 중첩, 드래그해서 다른 페이지 아래로 이동, 즐겨찾기, 휴지통(복원/영구 삭제) |
 | 🗃️ 데이터베이스 | 표 뷰와 칸반 보드 뷰. 속성: 텍스트, 숫자, 선택, 다중 선택, 상태, 사람, 날짜, 체크박스, URL. 카드를 드래그해 상태 변경. 각 항목은 본문을 가진 페이지 |
 | 💬 댓글 | 페이지별 댓글, 해결 처리, 실시간 반영 |
-| 🔑 로그인 | Google 계정, 이메일+비밀번호, 메일 링크(비밀번호 없이) |
+| 🔑 로그인 | GitHub, Google 계정, 이메일+비밀번호, 메일 링크(비밀번호 없이) |
 | 🔐 권한 | 소유자 / 편집자 / 뷰어. 이메일로 초대 (미가입자는 가입 시 자동 참여). 모든 테이블에 RLS 적용 |
 | 🔎 검색 | `⌘K` / `Ctrl+K` |
 | 🖼️ 업로드 | 에디터 이미지/파일 업로드는 Supabase Storage `uploads` 버킷에 저장 |
@@ -49,12 +49,18 @@ Next.js 16 · Supabase (Postgres / Auth / Realtime / Storage) · BlockNote + Yjs
 3. **Authentication → URL Configuration**
    - Site URL: `https://<your-app>.vercel.app`
    - Redirect URLs: `https://<your-app>.vercel.app/auth/callback`, `http://localhost:3000/auth/callback`
-4. **Google 로그인** (선택)
+4. **GitHub 로그인** (선택)
+   1. GitHub → Settings → Developer settings → [OAuth Apps → New OAuth App](https://github.com/settings/applications/new)
+      - Homepage URL: `https://<your-app>.vercel.app`
+      - Authorization callback URL: `https://<project-ref>.supabase.co/auth/v1/callback`
+   2. 생성 후 **Generate a new client secret**을 누르고, Client ID와 Secret을 Supabase **Authentication → Providers → GitHub**에 붙여넣고 켭니다.
+   - 로그인 화면에는 Supabase에서 켜진 로그인 방식만 버튼으로 표시됩니다.
+5. **Google 로그인** (선택)
    1. [Google Cloud Console](https://console.cloud.google.com/apis/credentials)에서 **OAuth 클라이언트 ID**(웹 애플리케이션)를 만듭니다.
       - 승인된 JavaScript 원본: `https://<your-app>.vercel.app`
       - 승인된 리디렉션 URI: `https://<project-ref>.supabase.co/auth/v1/callback`
    2. Supabase **Authentication → Providers → Google**을 켜고 Client ID와 Client Secret을 붙여넣습니다.
-5. (선택) 개발 중에는 **Authentication → Providers → Email**에서 *Confirm email*을 끄면 가입 즉시 로그인됩니다.
+6. (선택) 개발 중에는 **Authentication → Providers → Email**에서 *Confirm email*을 끄면 가입 즉시 로그인됩니다.
 
 ### 2. 로컬 실행
 
