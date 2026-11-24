@@ -107,7 +107,7 @@ export function ChatWidget() {
         <button
           onClick={() => setOpen(true)}
           title="문서 도우미"
-          className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-[90] flex h-14 w-14 items-center justify-center rounded-full bg-accent text-white shadow-lg transition hover:scale-105 hover:shadow-xl active:scale-95"
+          className="chat-fab fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-4 z-[90] flex h-14 w-14 items-center justify-center rounded-full bg-accent text-white shadow-lg transition hover:scale-105 hover:shadow-xl active:scale-95"
         >
           <Bot size={26} />
         </button>

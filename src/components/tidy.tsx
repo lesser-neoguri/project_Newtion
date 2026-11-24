@@ -155,26 +155,30 @@ function parseLine(raw: string): { kind: Kind; text: string; indent: number } {
 
 const sameKind = (a: Kind, b: Kind) => JSON.stringify({ ...a, checked: undefined, n: undefined }) === JSON.stringify({ ...b, checked: undefined, n: undefined });
 
-/** Text with inline word-level changes. */
-function Segments({ segs }: { segs: ReturnType<typeof diffWords> }) {
+type Side = "old" | "new";
+
+/** Text with inline changes, showing only what belongs to one version. */
+function Segments({ segs, side }: { segs: ReturnType<typeof diffWords>; side: Side }) {
   return (
     <>
       {segs.map((s, i) =>
         s.type === "same" ? (
           <Fragment key={i}>{s.text}</Fragment>
         ) : s.type === "del" ? (
-          <del key={i} className="rounded-sm bg-red-100 text-red-700 decoration-red-500/70 dark:bg-red-950/60 dark:text-red-300">{s.text}</del>
-        ) : (
-          <ins key={i} className="rounded-sm bg-green-100 text-green-800 no-underline dark:bg-green-900/50 dark:text-green-200">{s.text}</ins>
-        ),
+          side === "old" ? (
+            <del key={i} className="text-muted decoration-foreground/40">{s.text}</del>
+          ) : null
+        ) : side === "new" ? (
+          <ins key={i} className="rounded-[3px] bg-foreground/[0.08] px-px no-underline">{s.text}</ins>
+        ) : null,
       )}
     </>
   );
 }
 
-function TableCells({ text, segs }: { text: string; segs?: ReturnType<typeof diffWords> }) {
-  if (segs) {
-    return <div className="rounded border border-line px-2 py-1 font-mono text-[13px]"><Segments segs={segs} /></div>;
+function TableCells({ text, segs, side }: { text: string; segs?: ReturnType<typeof diffWords>; side?: Side }) {
+  if (segs && side) {
+    return <div className="rounded border border-line px-2 py-1 font-mono text-[13px]"><Segments segs={segs} side={side} /></div>;
   }
   const cells = text.replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
   return (
@@ -328,20 +332,58 @@ function collapse(rows: Row[], context = 1): Row[] {
   return out;
 }
 
-const NOTE_STYLE = {
-  error: { emoji: "🔴", label: "확인 필요", cls: "border-red-400 bg-red-50 dark:bg-red-950/40" },
-  warning: { emoji: "🟡", label: "주의", cls: "border-yellow-400 bg-yellow-50 dark:bg-yellow-950/30" },
-  info: { emoji: "🔵", label: "수정", cls: "border-sky-400 bg-sky-50 dark:bg-sky-950/30" },
+const NOTE_DOT = {
+  error: { dot: "bg-red-500", label: "확인 필요" },
+  warning: { dot: "bg-amber-400", label: "주의" },
+  info: { dot: "bg-foreground/30", label: "수정" },
 } as const;
 
 function NoteCard({ n }: { n: Note }) {
-  const s = NOTE_STYLE[n.severity];
+  const s = NOTE_DOT[n.severity];
   return (
-    <div className={`rounded-md border-l-[3px] px-2.5 py-1.5 text-xs leading-relaxed ${s.cls}`}>
-      <span className="mr-1">{s.emoji}</span>
-      <b className="font-semibold">{s.label}</b>
-      <span className="mx-1 text-muted">·</span>
-      {n.message}
+    <div className="flex gap-2 rounded-md bg-hover px-2.5 py-1.5 text-xs leading-relaxed text-foreground/80">
+      <span className={`mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full ${s.dot}`} />
+      <span><b className="font-medium text-foreground">{s.label}</b> · {n.message}</span>
+    </div>
+  );
+}
+
+/** One version (original or tidied) of a row. Returns null when the row doesn't exist on that side. */
+function Cell({
+  row, side, inCode, notes,
+}: { row: Row; side: Side; inCode: boolean; notes?: Note[] }) {
+  if (row.t === "skip") return null;
+  if (row.t === "add" && side === "old") return null;
+  if (row.t === "del" && side === "new") return null;
+
+  const raw = row.t === "change" ? (side === "old" ? row.del.text : row.add.text) : row.line.text;
+  const p = parseLine(raw);
+  if (p.kind.k === "tableSep" || p.kind.k === "fence") return null;
+
+  let body: React.ReactNode;
+  let tag: string | null = null;
+  if (row.t === "change") {
+    const po = parseLine(row.del.text), pn = parseLine(row.add.text);
+    const segs = diffWords(po.text, pn.text);
+    if (side === "new" && !sameKind(po.kind, pn.kind) && po.kind.k !== "blank") tag = `${KIND_LABEL[po.kind.k]} → ${KIND_LABEL[pn.kind.k]}`;
+    body = p.kind.k === "tableRow" ? <TableCells text={p.text} segs={segs} side={side} /> : <Segments segs={segs} side={side} />;
+  } else if (p.kind.k === "tableRow") {
+    body = <TableCells text={p.text} />;
+  } else {
+    body = p.text || "\u00a0";
+  }
+
+  const changed = row.t !== "same";
+  const whole = row.t === "add" || row.t === "del";
+  return (
+    <div className={`border-l-2 pl-2.5 ${changed ? "border-foreground/20" : "border-transparent"}`}>
+      <div className={row.t === "del" ? "text-muted line-through decoration-foreground/30" : row.t === "add" ? "rounded-[3px] bg-foreground/[0.05]" : ""}>
+        <BlockView kind={p.kind} indent={p.indent} inCode={inCode}>{body}</BlockView>
+      </div>
+      {(tag || (whole && side === "new")) && (
+        <div className="pb-0.5 text-[11px] text-muted">{tag ?? "새로 추가됨"}</div>
+      )}
+      {side === "new" && notes?.length ? <div className="space-y-1 pb-1.5 pt-0.5">{notes.map((n, i) => <NoteCard key={i} n={n} />)}</div> : null}
     </div>
   );
 }
@@ -349,6 +391,8 @@ function NoteCard({ n }: { n: Note }) {
 export function TidyReview({ tidy }: { tidy: TidyState }) {
   const { original, result } = tidy;
   const [onlyChanges, setOnlyChanges] = useState(false);
+  const [pane, setPane] = useState(0);
+  const scroller = useRef<HTMLDivElement>(null);
 
   const lines = useMemo(
     () => (result ? diffLines(normalizeMd(original), normalizeMd(result.markdown)) : []),
@@ -360,15 +404,16 @@ export function TidyReview({ tidy }: { tidy: TidyState }) {
     [lines],
   );
   const shown = useMemo(() => (onlyChanges ? collapse(rows) : rows), [rows, onlyChanges]);
-  // Which rows sit inside a ``` code block (in new-document order).
+  // Which rows sit inside a ``` code block (tracked separately for each version).
   const codeFlags = useMemo(() => {
-    const flags: boolean[] = [];
-    let inCode = false;
+    const flags: { old: boolean; new: boolean }[] = [];
+    let inOld = false, inNew = false;
     for (const r of shown) {
-      const text = r.t === "skip" ? "" : r.t === "change" ? r.add.text : r.line.text;
-      const isFence = r.t !== "skip" && parseLine(text).kind.k === "fence";
-      if (isFence) inCode = !inCode;
-      flags.push(!isFence && r.t !== "skip" && inCode);
+      const oldText = r.t === "skip" || r.t === "add" ? null : r.t === "change" ? r.del.text : r.line.text;
+      const newText = r.t === "skip" || r.t === "del" ? null : r.t === "change" ? r.add.text : r.line.text;
+      if (oldText != null && parseLine(oldText).kind.k === "fence") inOld = !inOld;
+      if (newText != null && parseLine(newText).kind.k === "fence") inNew = !inNew;
+      flags.push({ old: inOld, new: inNew });
     }
     return flags;
   }, [shown]);
@@ -390,85 +435,107 @@ export function TidyReview({ tidy }: { tidy: TidyState }) {
 
   const counts = {
     changed: rows.filter((r) => r.t === "change").length,
-    added: rows.filter((r) => r.t === "add" && parseLine(r.line.text).kind.k !== "blank").length,
-    removed: rows.filter((r) => r.t === "del" && parseLine(r.line.text).kind.k !== "blank").length,
+    added: rows.filter((r) => r.t === "add").length,
+    removed: rows.filter((r) => r.t === "del").length,
     error: result.notes.filter((n) => n.severity === "error").length,
   };
   const generalNotes = result.notes.filter((n) => n.line <= 0 || !visibleNewNos.length);
   const nothing = counts.changed + counts.added + counts.removed === 0;
+  const newNoOf = (r: Row) => (r.t === "change" ? r.add.newNo : r.t === "same" || r.t === "add" ? r.line.newNo : undefined);
+
+  const goTo = (i: number) => {
+    const el = scroller.current;
+    if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" });
+  };
+
+  const skipRow = (r: Row & { t: "skip" }, key: string | number) => (
+    <button key={key} onClick={() => setOnlyChanges(false)} className="my-1 block w-full py-0.5 text-left text-xs text-muted hover:text-foreground">
+      ⋯ 바뀌지 않은 {r.count}줄
+    </button>
+  );
+
+  const paneBody = (side: Side) =>
+    shown.map((r, idx) =>
+      r.t === "skip" ? skipRow(r, idx) : (
+        <Cell key={idx} row={r} side={side} inCode={codeFlags[idx][side]} notes={side === "new" ? notesByLine.get(newNoOf(r) ?? -1) : undefined} />
+      ),
+    );
 
   return (
     <div className="pb-40">
-      {/* Summary callout */}
-      <div className="mb-5 flex gap-3 rounded-lg bg-hover px-4 py-3">
-        <span className="text-xl leading-none">✨</span>
-        <div className="min-w-0 flex-1 space-y-2 text-sm">
+      {/* Summary */}
+      <div className="mb-5 flex gap-3 rounded-lg bg-hover px-4 py-3 text-sm">
+        <span className="leading-6">✨</span>
+        <div className="min-w-0 flex-1 space-y-1.5">
           <p className="leading-relaxed">{nothing ? "고칠 부분이 없었어요. 문서가 이미 잘 정리되어 있어요." : result.summary}</p>
           {!nothing && (
-            <div className="flex flex-wrap items-center gap-1.5 text-xs">
-              {counts.changed > 0 && <span className="rounded bg-background px-2 py-0.5">✏️ 수정 {counts.changed}</span>}
-              {counts.added > 0 && <span className="rounded bg-green-100 px-2 py-0.5 text-green-800 dark:bg-green-900/50 dark:text-green-200">＋ 추가 {counts.added}</span>}
-              {counts.removed > 0 && <span className="rounded bg-red-100 px-2 py-0.5 text-red-700 dark:bg-red-950/60 dark:text-red-300">－ 삭제 {counts.removed}</span>}
-              {counts.error > 0 && <span className="rounded bg-red-500 px-2 py-0.5 text-white">🔴 확인 필요 {counts.error}</span>}
-              <label className="ml-auto flex cursor-pointer items-center gap-1.5 text-muted">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+              <span>수정 {counts.changed}</span>
+              <span>추가 {counts.added}</span>
+              <span>삭제 {counts.removed}</span>
+              {counts.error > 0 && (
+                <span className="flex items-center gap-1 text-foreground">
+                  <span className="h-1.5 w-1.5 rounded-full bg-red-500" />확인 필요 {counts.error}
+                </span>
+              )}
+              <label className="ml-auto flex cursor-pointer items-center gap-1.5">
                 <input type="checkbox" checked={onlyChanges} onChange={(e) => setOnlyChanges(e.target.checked)} />
-                바뀐 부분만 보기
+                바뀐 부분만
               </label>
             </div>
           )}
-          {generalNotes.length > 0 && <div className="space-y-1">{generalNotes.map((n, i) => <NoteCard key={i} n={n} />)}</div>}
+          {generalNotes.length > 0 && <div className="space-y-1 pt-1">{generalNotes.map((n, i) => <NoteCard key={i} n={n} />)}</div>}
         </div>
       </div>
 
-      {/* Document with inline changes */}
-      <div className="text-base leading-7">
-        {shown.map((r, idx) => {
-          if (r.t === "skip") {
-            return (
-              <button key={idx} onClick={() => setOnlyChanges(false)} className="my-1 block w-full rounded py-0.5 text-left text-xs text-muted hover:bg-hover">
-                ⋯ 바뀌지 않은 {r.count}줄
+      {/* Desktop: original and tidied side by side, rows aligned */}
+      <div className="hidden md:block">
+        <div className="sticky top-0 z-10 mb-2 grid grid-cols-2 gap-8 border-b border-line bg-background py-2 text-xs font-medium text-muted">
+          <span>원본</span>
+          <span>정리본</span>
+        </div>
+        <div className="text-[15px] leading-7">
+          {shown.map((r, idx) =>
+            r.t === "skip" ? skipRow(r, idx) : (
+              <div key={idx} className="grid grid-cols-2 gap-8">
+                <div className="min-w-0"><Cell row={r} side="old" inCode={codeFlags[idx].old} /></div>
+                <div className="min-w-0"><Cell row={r} side="new" inCode={codeFlags[idx].new} notes={notesByLine.get(newNoOf(r) ?? -1)} /></div>
+              </div>
+            ),
+          )}
+        </div>
+      </div>
+
+      {/* Phone: swipe between the two versions */}
+      <div className="md:hidden">
+        <div className="sticky top-0 z-10 -mx-4 mb-3 flex items-center gap-2 border-b border-line bg-background px-4 py-2">
+          <div className="flex rounded-lg bg-hover p-0.5 text-sm">
+            {["원본", "정리본"].map((label, i) => (
+              <button
+                key={label}
+                onClick={() => goTo(i)}
+                className={`rounded-md px-4 py-1 transition ${pane === i ? "bg-background font-medium shadow-sm" : "text-muted"}`}
+              >
+                {label}
               </button>
-            );
-          }
-          const base = r.t === "change" ? r.add : r.line;
-          const p = parseLine(base.text);
-          if (p.kind.k === "tableSep") return null;
-          if (p.kind.k === "fence" && r.t === "same") return null;
-          const inCode = codeFlags[idx];
-
-          let body: React.ReactNode;
-          let tag: string | null = null;
-          if (r.t === "change") {
-            const pd = parseLine(r.del.text);
-            if (!sameKind(pd.kind, p.kind) && pd.kind.k !== "blank") tag = `${KIND_LABEL[pd.kind.k]} → ${KIND_LABEL[p.kind.k]}`;
-            const segs = diffWords(pd.text, p.text);
-            body = p.kind.k === "tableRow" ? <TableCells text={p.text} segs={segs} /> : <Segments segs={segs} />;
-          } else if (p.kind.k === "tableRow") {
-            body = <TableCells text={p.text} />;
-          } else {
-            body = p.text || (p.kind.k === "blank" ? null : " ");
-          }
-
-          const newNo = r.t === "del" ? undefined : r.t === "change" ? r.add.newNo : r.line.newNo;
-          const notes = newNo ? notesByLine.get(newNo) : undefined;
-          const wrap =
-            r.t === "add" ? "border-l-[3px] border-green-500 bg-green-50/70 pl-2 dark:bg-green-950/30"
-            : r.t === "del" ? "border-l-[3px] border-red-400 bg-red-50/60 pl-2 text-red-700/80 line-through decoration-red-400/70 opacity-80 dark:bg-red-950/20 dark:text-red-300/80"
-            : r.t === "change" ? "border-l-[3px] border-amber-400 pl-2"
-            : "border-l-[3px] border-transparent pl-2";
-
-          return (
-            <div key={idx} className="grid gap-x-4 lg:grid-cols-[minmax(0,1fr)_240px]">
-              <div className={`relative -ml-[11px] rounded-r ${wrap}`}>
-                {tag && <span className="float-right ml-2 mt-1 rounded bg-amber-100 px-1.5 py-px text-[11px] text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">{tag}</span>}
-                <BlockView kind={p.kind} indent={p.indent} inCode={inCode && p.kind.k !== "fence"}>{body}</BlockView>
-              </div>
-              <div className="space-y-1 pb-1 lg:pt-1">
-                {notes?.map((n, i) => <NoteCard key={i} n={n} />)}
-              </div>
+            ))}
+          </div>
+          <span className="ml-auto text-xs text-muted">{pane === 0 ? "넘겨서 정리본 보기 →" : "← 넘겨서 원본 보기"}</span>
+        </div>
+        <div
+          ref={scroller}
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            setPane(Math.round(el.scrollLeft / Math.max(1, el.clientWidth)));
+          }}
+          className="-mx-4 flex snap-x snap-mandatory overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {(["old", "new"] as const).map((side) => (
+            <div key={side} className="w-full shrink-0 snap-start px-4 text-base leading-7">
+              {paneBody(side)}
             </div>
-          );
-        })}
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -479,13 +546,19 @@ export function TidyReview({ tidy }: { tidy: TidyState }) {
 /* ------------------------------------------------------------------ */
 
 const MODES: { id: TidyMode; label: string; desc: string }[] = [
-  { id: "tidy", label: "✨ 전체 정리", desc: "맞춤법·중복·구조를 한 번에" },
-  { id: "proofread", label: "✍️ 맞춤법·문장", desc: "구조는 그대로, 문장만" },
-  { id: "structure", label: "🧱 구조 개선", desc: "제목·목록·표로 정리" },
+  { id: "tidy", label: "전체 정리", desc: "맞춤법·중복·구조를 한 번에" },
+  { id: "proofread", label: "맞춤법·문장", desc: "구조는 그대로, 문장만" },
+  { id: "structure", label: "구조 개선", desc: "제목·목록·표로 정리" },
 ];
 
 export function TidyBar({ tidy }: { tidy: TidyState }) {
   const { phase } = tidy;
+  // Hide the floating chat button while this bar is open (they share the bottom-right corner).
+  useEffect(() => {
+    if (!tidy.open) return;
+    document.body.classList.add("tidy-open");
+    return () => document.body.classList.remove("tidy-open");
+  }, [tidy.open]);
   if (!tidy.open) return null;
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[93] flex justify-center px-0 sm:bottom-5 sm:px-4 md:left-64">
@@ -502,7 +575,7 @@ export function TidyBar({ tidy }: { tidy: TidyState }) {
                   onClick={() => tidy.setMode(m.id)}
                   title={m.desc}
                   className={`shrink-0 rounded-full border px-3 py-1 text-xs ${
-                    tidy.mode === m.id ? "border-accent bg-accent/10 font-medium text-accent" : "border-line text-foreground/80 hover:bg-hover"
+                    tidy.mode === m.id ? "border-foreground/30 bg-hover font-medium" : "border-line text-muted hover:bg-hover"
                   }`}
                 >
                   {m.label}
@@ -510,7 +583,7 @@ export function TidyBar({ tidy }: { tidy: TidyState }) {
               ))}
             </div>
             <form onSubmit={(e) => { e.preventDefault(); void tidy.run(); }} className="flex items-center gap-2">
-              <Sparkles size={18} className="shrink-0 text-purple-500" />
+              <Sparkles size={18} className="shrink-0 text-muted" />
               <input
                 autoFocus
                 value={tidy.instruction}
@@ -531,7 +604,7 @@ export function TidyBar({ tidy }: { tidy: TidyState }) {
 
         {phase === "running" && (
           <div className="flex items-center gap-3 p-3 text-sm">
-            <Sparkles size={18} className="shrink-0 animate-pulse text-purple-500" />
+            <Sparkles size={18} className="shrink-0 animate-pulse text-muted" />
             <span className="flex-1">
               AI가 문서를 정리하고 있어요
               <span className="ml-1 inline-flex gap-0.5 align-middle">
@@ -545,7 +618,7 @@ export function TidyBar({ tidy }: { tidy: TidyState }) {
 
         {phase === "review" && (
           <div className="flex flex-wrap items-center gap-2 p-3 text-sm">
-            <Sparkles size={18} className="hidden shrink-0 text-purple-500 sm:block" />
+            <Sparkles size={18} className="hidden shrink-0 text-muted sm:block" />
             <span className="hidden min-w-0 flex-1 sm:inline">바뀐 부분을 확인하고 적용하세요</span>
             <button onClick={tidy.discard} className="mr-auto rounded-md px-3 py-1.5 text-muted hover:bg-hover sm:mr-0">버리기</button>
             <button onClick={() => void tidy.run()} className="flex items-center gap-1 rounded-md border border-line px-3 py-1.5 hover:bg-hover">
@@ -559,7 +632,7 @@ export function TidyBar({ tidy }: { tidy: TidyState }) {
 
         {phase === "applied" && (
           <div className="flex items-center gap-2 p-3 text-sm">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-green-500 text-white"><Check size={12} /></span>
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-foreground text-background"><Check size={12} /></span>
             적용했어요. 되돌리려면 문서에서 Ctrl/⌘ + Z
           </div>
         )}

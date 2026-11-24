@@ -167,7 +167,7 @@ export function PageView({ pageId }: { pageId: string }) {
             ))}
           </div>
           {editable && page.kind !== "database" && (
-            <button title="문서 정리 (AI)" onClick={() => (tidy.open ? tidy.close() : tidy.setOpen(true))} className={`flex items-center gap-1 rounded p-1.5 hover:bg-hover ${tidy.open ? "bg-hover text-purple-600" : ""}`}>
+            <button title="문서 정리 (AI)" onClick={() => (tidy.open ? tidy.close() : tidy.setOpen(true))} className={`flex items-center gap-1 rounded p-1.5 hover:bg-hover ${tidy.open ? "bg-hover" : ""}`}>
               <Wand2 size={16} />
               <span className="hidden text-xs lg:inline">AI 정리</span>
             </button>
@@ -236,7 +236,7 @@ export function PageView({ pageId }: { pageId: string }) {
             </div>
           )}
 
-          <div className={`mx-auto px-4 md:px-12 ${page.kind === "database" ? "max-w-6xl" : "max-w-3xl"}`}>
+          <div className={`mx-auto px-4 md:px-12 ${page.kind === "database" || tidy.reviewing ? "max-w-6xl" : "max-w-3xl"}`}>
             {/* Icon */}
             <div className={`group relative ${page.cover ? "-mt-8 md:-mt-10" : "pt-6 md:pt-16"}`}>
               {page.icon && (

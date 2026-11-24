@@ -85,3 +85,8 @@ body {
     font-size: 16px !important;
   }
 }
+
+/* The AI tidy bar takes over the bottom of the screen while open. */
+body.tidy-open .chat-fab {
+  display: none;
+}
