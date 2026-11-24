@@ -39,7 +39,8 @@ export function useTidy(editor: BlockNoteEditor | null, pageId: string, pageTitl
 
   async function run() {
     if (!editor) return;
-    const md = editor.blocksToMarkdownLossy(editor.document).trimEnd();
+    // Normalized so export quirks (BlockNote writes "* item") don't show up as "fixes".
+    const md = normalizeMd(editor.blocksToMarkdownLossy(editor.document));
     setOriginal(md);
     setResult(null);
     setError("");
@@ -84,7 +85,7 @@ export function useTidy(editor: BlockNoteEditor | null, pageId: string, pageTitl
 
   function apply() {
     if (!editor || !result) return;
-    const current = editor.blocksToMarkdownLossy(editor.document).trimEnd();
+    const current = normalizeMd(editor.blocksToMarkdownLossy(editor.document));
     if (current !== original) {
       const ok = confirm("정리를 시작한 뒤 문서가 바뀌었습니다 (다른 사람이 편집했을 수 있어요). 적용하면 그 변경 내용이 덮어써집니다. 계속할까요?");
       if (!ok) return;
