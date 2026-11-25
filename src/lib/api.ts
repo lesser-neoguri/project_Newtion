@@ -96,11 +96,34 @@ export async function deleteForever(sb: SupabaseClient, pageId: string) {
   if (error) throw error;
 }
 
-export async function uploadFile(sb: SupabaseClient, workspaceId: string, file: File) {
+/** Phone photos are often 4000px+ and several MB: scale big ones down before upload. */
+async function shrinkImage(file: File, maxSide = 2000): Promise<File> {
+  if (!/^image\/(jpeg|png|webp|heic|heif)$/.test(file.type) || file.size < 1.5 * 1024 * 1024) return file;
+  try {
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, maxSide / Math.max(bmp.width, bmp.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bmp.width * scale);
+    canvas.height = Math.round(bmp.height * scale);
+    canvas.getContext("2d")!.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    bmp.close();
+    const type = file.type === "image/png" ? "image/png" : "image/jpeg";
+    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, type, 0.85));
+    if (!blob || blob.size >= file.size) return file;
+    const name = type === "image/jpeg" ? file.name.replace(/\.[^.]+$/, "") + ".jpg" : file.name;
+    return new File([blob], name, { type });
+  } catch {
+    return file; // e.g. a format the browser can't decode: upload as is
+  }
+}
+
+export async function uploadFile(sb: SupabaseClient, workspaceId: string, original: File) {
+  const file = await shrinkImage(original);
   const ext = file.name.split(".").pop() || "bin";
   const path = `${workspaceId}/${crypto.randomUUID()}.${ext}`;
   const { error } = await sb.storage.from("uploads").upload(path, file, {
     cacheControl: "3600",
+    contentType: file.type || undefined,
     upsert: false,
   });
   if (error) throw error;

@@ -13,7 +13,7 @@ import {
   useComponentsContext,
   useCreateBlockNote,
 } from "@blocknote/react";
-import { Sparkles } from "lucide-react";
+import { ImagePlus, Sparkles } from "lucide-react";
 import { BlockNoteView } from "@blocknote/mantine";
 import { withCollaboration } from "@blocknote/core/yjs";
 import { ko } from "@blocknote/core/locales";
@@ -72,6 +72,68 @@ function AskAIButton({ onAsk }: { onAsk: (a: SelectionAttachment) => void }) {
         <Sparkles size={14} /> AI
       </span>
     </Components.FormattingToolbar.Button>
+  );
+}
+
+/** Toolbar button: pick one or more images and insert them below the current block. */
+function ImageButton() {
+  const editor = useBlockNoteEditor();
+  const Components = useComponentsContext();
+  const input = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  if (!Components) return null;
+
+  const onFiles = async (files: File[]) => {
+    if (!files.length || !editor.uploadFile) return;
+    setBusy(true);
+    try {
+      let anchor = editor.getTextCursorPosition().block;
+      for (const file of files) {
+        // Insert a placeholder right away, then point it at the uploaded file.
+        const placeholder = { type: "image", props: { name: file.name } } as never;
+        const empty = Array.isArray(anchor.content) && anchor.content.length === 0 && anchor.type === "paragraph";
+        const [block] = empty ? editor.replaceBlocks([anchor], [placeholder]).insertedBlocks : editor.insertBlocks([placeholder], anchor, "after");
+        try {
+          const url = await editor.uploadFile(file, block.id);
+          editor.updateBlock(block, { props: { url: typeof url === "string" ? url : "" } } as never);
+        } catch (e) {
+          editor.removeBlocks([block]);
+          alert(`이미지 업로드 실패: ${file.name}\n${e instanceof Error ? e.message : ""}`);
+        }
+        anchor = editor.getBlock(block.id) ?? anchor;
+      }
+      // Leave an empty line under the images so typing can continue.
+      const next = editor.getNextBlock(anchor);
+      if (!next) editor.insertBlocks([{ type: "paragraph" }], anchor, "after");
+      const target = editor.getNextBlock(anchor);
+      if (target) editor.setTextCursorPosition(target, "start");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <input
+        ref={input}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        onChange={(e) => { const f = [...(e.target.files ?? [])]; e.target.value = ""; void onFiles(f); }}
+      />
+      <Components.FormattingToolbar.Button
+        mainTooltip="이미지 넣기 (붙여넣기·끌어다 놓기도 돼요)"
+        label="이미지"
+        isDisabled={busy}
+        // Keep the editor focused so the toolbar (and phone keyboard) don't jump.
+        onClick={() => input.current?.click()}
+      >
+        <span className="flex items-center gap-1 px-0.5 text-[13px]">
+          <ImagePlus size={15} />{busy ? "…" : ""}
+        </span>
+      </Components.FormattingToolbar.Button>
+    </>
   );
 }
 
@@ -259,7 +321,11 @@ function EditorInner({
   const toolbar = useCallback(
     () => (
       <FormattingToolbar>
-        {editable && onAskAI ? [<AskAIButton key="ask-ai" onAsk={onAskAI} />, ...getFormattingToolbarItems()] : getFormattingToolbarItems()}
+        {[
+          ...(editable && onAskAI ? [<AskAIButton key="ask-ai" onAsk={onAskAI} />] : []),
+          ...(editable ? [<ImageButton key="image" />] : []),
+          ...getFormattingToolbarItems(),
+        ]}
       </FormattingToolbar>
     ),
     [editable, onAskAI],
