@@ -105,7 +105,7 @@ export function ClaudeConnect() {
           value={`claude mcp add --transport http newtion ${endpoint} --header "Authorization: Bearer ${tok}"`}
         />
         <CopyBlock
-          label="Claude 데스크톱 — 설정 → 개발자 → 구성 편집 (claude_desktop_config.json)"
+          label="Claude 데스크톱 — 설정 → 데스크톱 앱 → 확장 프로그램 '관리' → 로컬 MCP 서버 '구성 편집' → claude_desktop_config.json에 붙여넣고 Claude 재시작"
           value={JSON.stringify({
             mcpServers: {
               newtion: {

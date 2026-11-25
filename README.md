@@ -96,7 +96,7 @@ Claude Code나 Claude 데스크톱이 내 권한으로 Newtion 문서를 읽고 
    ```bash
    claude mcp add --transport http newtion https://<your-app>.vercel.app/api/mcp --header "Authorization: Bearer <토큰>"
    ```
-   Claude 데스크톱은 설정 화면에 표시되는 `claude_desktop_config.json` 예시(mcp-remote)를 씁니다.
+   Claude 데스크톱은 설정 → 데스크톱 앱 → 확장 프로그램 '관리' → 로컬 MCP 서버 '구성 편집'으로 `claude_desktop_config.json`을 열고, Newtion 설정 화면의 예시(mcp-remote, Node.js 필요)를 붙여넣은 뒤 재시작합니다.
 3. “project_sun 기획서에서 층 종류 표에 ‘화산’ 추가해줘”처럼 요청합니다.
 
 | 도구 | 하는 일 |
