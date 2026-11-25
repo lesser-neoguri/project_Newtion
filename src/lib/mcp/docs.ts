@@ -9,7 +9,8 @@
 import * as Y from "yjs";
 import { createClient } from "@supabase/supabase-js";
 import { ServerBlockNoteEditor } from "@blocknote/server-util";
-import { getDocument } from "@blocknote/server-util/dom";
+// happy-dom instead of jsdom: jsdom pulls in an ES-module dependency that the Vercel function runtime refuses to require().
+import { Window } from "happy-dom";
 import { SupabaseYProvider, fromB64, toB64 } from "@/lib/yjs-supabase";
 
 export const FRAGMENT = "document-store";
@@ -20,7 +21,7 @@ export type AnyBlock = any;
 
 let editor: Editor | null = null;
 function ed(): Editor {
-  if (!editor) editor = ServerBlockNoteEditor.create({}, getDocument());
+  if (!editor) editor = ServerBlockNoteEditor.create({}, new Window().document as unknown as Document);
   return editor;
 }
 
