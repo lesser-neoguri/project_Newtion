@@ -87,9 +87,9 @@ npm run dev
 
 ---
 
-## 🤖 Claude에서 Newtion 문서 고치기 (MCP)
+## 🤖 Claude·Codex에서 Newtion 문서 고치기 (MCP)
 
-Claude Code나 Claude 데스크톱이 내 권한으로 Newtion 문서를 읽고 고칠 수 있습니다.
+Claude Code, Claude 데스크톱, OpenAI Codex(CLI·IDE 확장)가 내 권한으로 Newtion 문서를 읽고 고칠 수 있습니다.
 
 1. Newtion **설정 및 멤버 → Claude 연결**에서 토큰을 발급합니다 (한 번만 표시).
 2. Claude Code:
@@ -97,6 +97,13 @@ Claude Code나 Claude 데스크톱이 내 권한으로 Newtion 문서를 읽고 
    claude mcp add --transport http newtion https://<your-app>.vercel.app/api/mcp --header "Authorization: Bearer <토큰>"
    ```
    Claude 데스크톱은 설정 → 데스크톱 앱 → 확장 프로그램 '관리' → 로컬 MCP 서버 '구성 편집'으로 `claude_desktop_config.json`을 열고, Newtion 설정 화면의 예시(mcp-remote, Node.js 필요)를 붙여넣은 뒤 재시작합니다.
+   Codex: `~/.codex/config.toml`(Windows `%USERPROFILE%\.codex\config.toml`)에 추가합니다.
+   ```toml
+   [mcp_servers.newtion]
+   url = "https://<your-app>.vercel.app/api/mcp"
+   http_headers = { "Authorization" = "Bearer <토큰>" }
+   ```
+   또는 `codex mcp add newtion --url https://<your-app>.vercel.app/api/mcp --bearer-token-env-var NEWTION_TOKEN` (토큰은 환경변수 `NEWTION_TOKEN`).
 3. “project_sun 기획서에서 층 종류 표에 ‘화산’ 추가해줘”처럼 요청합니다.
 
 | 도구 | 하는 일 |

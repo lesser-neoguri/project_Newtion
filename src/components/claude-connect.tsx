@@ -38,10 +38,11 @@ function CopyBlock({ label, value }: { label: string; value: string }) {
 export function ClaudeConnect() {
   const { sb, me } = useWorkspace();
   const [tokens, setTokens] = useState<Token[]>([]);
-  const [name, setName] = useState("Claude Code");
+  const [name, setName] = useState("내 AI 도구");
   const [fresh, setFresh] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [client, setClient] = useState<"claude-code" | "claude-desktop" | "codex">("claude-code");
   const endpoint = typeof window !== "undefined" ? `${window.location.origin}/api/mcp` : "/api/mcp";
 
   const load = async () => {
@@ -62,7 +63,7 @@ export function ClaudeConnect() {
   }
 
   async function revoke(t: Token) {
-    if (!confirm(`'${t.name}' 토큰을 폐기할까요? 이 토큰을 쓰는 Claude는 더 이상 접근할 수 없습니다.`)) return;
+    if (!confirm(`'${t.name}' 토큰을 폐기할까요? 이 토큰을 쓰는 AI는 더 이상 접근할 수 없습니다.`)) return;
     await sb.from("api_tokens").delete().eq("id", t.id);
     await load();
   }
@@ -72,9 +73,9 @@ export function ClaudeConnect() {
   return (
     <section className="space-y-4 rounded-xl border border-line p-5">
       <div>
-        <h2 className="font-semibold">🤖 Claude 연결 (MCP)</h2>
+        <h2 className="font-semibold">🤖 AI 연결 (MCP) — Claude · Codex</h2>
         <p className="mt-1 text-sm text-muted">
-          Claude가 내 권한으로 Newtion 문서를 읽고 고칠 수 있게 연결합니다. Claude의 수정은 열려 있는 편집기에 실시간으로 나타나고,
+          Claude나 Codex가 내 권한으로 Newtion 문서를 읽고 고칠 수 있게 연결합니다. AI의 수정은 열려 있는 편집기에 실시간으로 나타나고,
           내가 속한 워크스페이스에만 접근합니다. 뷰어인 워크스페이스는 읽기만 됩니다.
         </p>
       </div>
@@ -100,24 +101,56 @@ export function ClaudeConnect() {
       )}
 
       <div className="space-y-3">
-        <CopyBlock
-          label="Claude Code — 터미널에서 한 번 실행"
-          value={`claude mcp add --transport http newtion ${endpoint} --header "Authorization: Bearer ${tok}"`}
-        />
-        <CopyBlock
-          label="Claude 데스크톱 — 설정 → 데스크톱 앱 → 확장 프로그램 '관리' → 로컬 MCP 서버 '구성 편집' → claude_desktop_config.json에 붙여넣고 Claude 재시작"
-          value={JSON.stringify({
-            mcpServers: {
-              newtion: {
-                command: "npx",
-                args: ["-y", "mcp-remote", endpoint, "--header", "Authorization:${NEWTION_TOKEN}"],
-                env: { NEWTION_TOKEN: `Bearer ${tok}` },
+        <div className="flex gap-1 rounded-lg bg-hover p-0.5 text-sm">
+          {(["claude-code", "claude-desktop", "codex"] as const).map((k) => (
+            <button
+              key={k}
+              onClick={() => setClient(k)}
+              className={`flex-1 rounded-md px-2 py-1 ${client === k ? "bg-background font-medium shadow-sm" : "text-muted"}`}
+            >
+              {k === "claude-code" ? "Claude Code" : k === "claude-desktop" ? "Claude 데스크톱" : "Codex"}
+            </button>
+          ))}
+        </div>
+
+        {client === "claude-code" && (
+          <CopyBlock
+            label="터미널에서 한 번 실행"
+            value={`claude mcp add --transport http newtion ${endpoint} --header "Authorization: Bearer ${tok}"`}
+          />
+        )}
+
+        {client === "claude-desktop" && (
+          <CopyBlock
+            label={"설정 → 데스크톱 앱 → 확장 프로그램 '관리' → 로컬 MCP 서버 '구성 편집' → claude_desktop_config.json 바깥 { } 안에 \"mcpServers\" 항목으로 넣고 Claude 재시작 (Node.js 필요)"}
+            value={JSON.stringify({
+              mcpServers: {
+                newtion: {
+                  command: "npx",
+                  args: ["-y", "mcp-remote", endpoint, "--header", "Authorization:${NEWTION_TOKEN}"],
+                  env: { NEWTION_TOKEN: `Bearer ${tok}` },
+                },
               },
-            },
-          }, null, 2)}
-        />
+            }, null, 2)}
+          />
+        )}
+
+        {client === "codex" && (
+          <>
+            <CopyBlock
+              label={"config.toml 맨 아래에 추가 — Windows: %USERPROFILE%\\.codex\\config.toml · macOS/Linux: ~/.codex/config.toml (CLI·IDE 확장 공용, 저장 후 Codex 재시작)"}
+              value={`[mcp_servers.newtion]\nurl = "${endpoint}"\nhttp_headers = { "Authorization" = "Bearer ${tok}" }`}
+            />
+            <CopyBlock
+              label="또는 터미널에서: 토큰을 환경변수 NEWTION_TOKEN에 넣고 등록 (Windows는 setx 후 새 터미널에서 두 번째 줄 실행)"
+              value={`setx NEWTION_TOKEN "${tok}"\ncodex mcp add newtion --url ${endpoint} --bearer-token-env-var NEWTION_TOKEN`}
+            />
+            <p className="text-xs text-muted">확인: <code className="rounded bg-hover px-1">codex mcp list</code>에서 newtion이 enabled로 보이면 연결된 것입니다.</p>
+          </>
+        )}
+
         <p className="text-xs text-muted">
-          연결한 뒤 Claude에게 “Newtion 워크스페이스 목록 보여줘”, “project_sun 기획서에서 층 종류 표에 ‘화산’ 추가해줘”처럼 말하면 됩니다.
+          연결한 뒤 “Newtion 워크스페이스 목록 보여줘”, “project_sun 기획서에서 층 종류 표에 ‘화산’ 추가해줘”처럼 말하면 됩니다.
         </p>
       </div>
 
