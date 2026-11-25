@@ -18,6 +18,7 @@ Next.js 16 · Supabase (Postgres / Auth / Realtime / Storage) · BlockNote + Yjs
 | 🤖 문서 도우미 | 오른쪽 아래 버튼. 이 페이지 / 하위 포함 / 워크스페이스 전체 범위의 문서를 바탕으로 Claude가 답변 (`ANTHROPIC_API_KEY` 필요) |
 | ✨ 문서 정리 | 페이지 상단 ✨ 버튼. Claude가 문서를 정리(전체 / 맞춤법 / 구조)하고, 바뀐 줄을 컴파일러 출력창처럼 diff와 error·warning·info로 보여줌. 적용 전까지 원문 유지 |
 | 📱 모바일 | 서랍형 사이드바, 터치용 버튼 표시, 전체 화면 챗봇·댓글 |
+| 🕘 버전 기록 | 페이지마다 버전이 남음: 편집을 다시 시작할 때(10분 이상 쉰 뒤) 직전 상태 자동 저장, 직접 저장(이름 붙이기), AI 정리·Claude 수정·복원 직전 자동 저장. `⋯ → 버전 기록`에서 지금 문서와 비교하고 복원 |
 | 🔎 검색 | `⌘K` / `Ctrl+K` |
 | 🖼️ 업로드 | 에디터 이미지/파일 업로드는 Supabase Storage `uploads` 버킷에 저장 |
 
@@ -105,6 +106,7 @@ Claude Code나 Claude 데스크톱이 내 권한으로 Newtion 문서를 읽고 
 | `update_page`, `append_to_page` | 본문 전체 바꾸기 / 끝에 덧붙이기 |
 | `create_page`, `rename_page` | 페이지 만들기 / 제목·아이콘 바꾸기 |
 | `query_database`, `add_database_row`, `update_database_row` | 데이터베이스 보기·항목 추가·수정 (속성은 이름으로) |
+| `list_versions`, `read_version`, `restore_version` | 버전 기록 보기·버전 내용 읽기·복원 (복원 전 상태도 버전으로 남음) |
 | `add_comment` | 댓글 달기 |
 
 - Claude의 수정은 공동 편집자처럼 실시간 채널로 들어가, 열려 있는 탭에 바로 나타나고 바뀐 블록만 교체됩니다.

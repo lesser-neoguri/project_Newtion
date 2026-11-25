@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  ChevronRight, FileText, ImageIcon, Link2, MessageSquare, MoreHorizontal, Plus, Smile, Star, Table2, Trash2,
+  ChevronRight, FileText, History, ImageIcon, Link2, MessageSquare, MoreHorizontal, Plus, Smile, Star, Table2, Trash2,
   RotateCcw, LayoutTemplate,
 } from "lucide-react";
 import { useWorkspace } from "./workspace-context";
@@ -14,6 +14,7 @@ import { DatabaseView } from "./database-view";
 import { PropertyCell } from "./property-cell";
 import { CommentsPanel } from "./comments";
 import { TidyBar, TidyReview, useTidy } from "./tidy";
+import { VersionPreview, VersionsPanel, useSnapshot, type PageVersion } from "./versions";
 import type { BlockNoteEditor } from "./editor";
 import { aiHub } from "@/lib/ai-hub";
 import { selectionToAttachment } from "@/lib/selection";
@@ -34,7 +35,13 @@ export function PageView({ pageId }: { pageId: string }) {
   const [menu, setMenu] = useState(false);
   const [iconPicker, setIconPicker] = useState(false);
   const [editor, setEditor] = useState<BlockNoteEditor | null>(null);
-  const tidy = useTidy(editor, pageId, page?.title ?? "");
+  const [showVersions, setShowVersions] = useState(false);
+  const [previewVersion, setPreviewVersion] = useState<PageVersion | null>(null);
+  const [versionsReload, setVersionsReload] = useState(0);
+  const snapshot = useSnapshot(page, editor);
+  const tidy = useTidy(editor, pageId, page?.title ?? "", (label) => {
+    void snapshot("tidy", label).then(() => setVersionsReload((k) => k + 1));
+  });
   const { attach: tidyAttach, setOpen: setTidyOpen, setAttachment: setTidyAttachment } = tidy;
   const aiEditable = !!page && canEdit && !page.archived_at && page.kind !== "database";
 
@@ -200,6 +207,11 @@ export function PageView({ pageId }: { pageId: string }) {
               <MenuItem onClick={() => { void navigator.clipboard.writeText(window.location.href); setMenu(false); }}>
                 <Link2 size={14} /> 링크 복사
               </MenuItem>
+              {page.kind !== "database" && (
+                <MenuItem onClick={() => { setMenu(false); setShowComments(false); setShowVersions(true); }}>
+                  <History size={14} /> 버전 기록
+                </MenuItem>
+              )}
               {canEdit && page.kind === "doc" && (
                 <MenuItem onClick={() => { setMenu(false); ws.ui.setTemplatesOpen({ parentId: pageId }); }}>
                   <LayoutTemplate size={14} /> 하위에 템플릿 추가
@@ -305,7 +317,7 @@ export function PageView({ pageId }: { pageId: string }) {
             ) : (
               <>
                 {/* Editor stays mounted while reviewing so Apply can write through it. */}
-                <div className={tidy.reviewing ? "hidden" : ""}>
+                <div className={tidy.reviewing || previewVersion ? "hidden" : ""}>
                 <CollaborativeEditor
                   sb={sb}
                   pageId={pageId}
@@ -323,6 +335,25 @@ export function PageView({ pageId }: { pageId: string }) {
                 )}
                 </div>
                 {tidy.reviewing && <TidyReview tidy={tidy} />}
+                {previewVersion && !tidy.reviewing && (
+                  <VersionPreview
+                    version={previewVersion}
+                    editor={editor}
+                    currentTitle={page.title}
+                    canEdit={editable}
+                    onClose={() => setPreviewVersion(null)}
+                    onRestore={async () => {
+                      if (!editor) return;
+                      if (!confirm("이 버전으로 복원할까요? 지금 문서는 버전 기록에 남아서 다시 되돌릴 수 있어요.")) return;
+                      await snapshot("restore", null);
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      editor.replaceBlocks(editor.document, previewVersion.content as any);
+                      if (previewVersion.title !== page.title) await patch({ title: previewVersion.title });
+                      setPreviewVersion(null);
+                      setVersionsReload((k) => k + 1);
+                    }}
+                  />
+                )}
               </>
             )}
           </div>
@@ -330,6 +361,26 @@ export function PageView({ pageId }: { pageId: string }) {
         {editable && page.kind !== "database" && <TidyBar tidy={tidy} />}
       </div>
       {showComments && <CommentsPanel pageId={pageId} onClose={() => setShowComments(false)} />}
+      {showVersions && !showComments && (
+        <VersionsPanel
+          pageId={pageId}
+          canEdit={editable}
+          selectedId={previewVersion?.id ?? null}
+          reloadKey={versionsReload}
+          onSelect={(v) => {
+            setPreviewVersion(v);
+            // Phones: the list covers the screen, so close it to show the comparison.
+            if (window.matchMedia("(max-width: 767px)").matches) setShowVersions(false);
+          }}
+          onSaveNow={async () => {
+            const name = prompt("버전 이름 (비워 두면 이름 없이 저장)", "");
+            if (name === null) return;
+            await snapshot("manual", name.trim() || null);
+            setVersionsReload((k) => k + 1);
+          }}
+          onClose={() => { setShowVersions(false); setPreviewVersion(null); }}
+        />
+      )}
     </div>
   );
 }

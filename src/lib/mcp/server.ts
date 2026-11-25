@@ -69,12 +69,19 @@ export function createNewtionMcp(token: string) {
     return blocksToMarkdown(blocksOf(docFromStored(p.ydoc, p.content)));
   }
 
-  /** Writes new blocks into a page through the live collaboration channel, then saves. */
-  async function writeBody(p: PageData, blocks: AnyBlock[]) {
+  /** Writes new blocks into a page through the live collaboration channel, then saves.
+   *  The state right before the edit is kept as a version (source / label). */
+  async function writeBody(p: PageData, blocks: AnyBlock[], source: "mcp" | "restore" = "mcp", label: string | null = null) {
     if (p.role === "viewer") throw new ToolError("no permission");
     if (p.kind === "database") throw new ToolError("데이터베이스 페이지에는 본문이 없습니다. 항목은 add_database_row로 추가하세요.");
     const doc = docFromStored(p.ydoc, p.content);
-    const stats = await withLiveDoc(p.id, doc, (d) => applyBlocks(d, blocks));
+    const stats = await withLiveDoc(p.id, doc, async (d) => {
+      const before = blocksOf(d);
+      if ((await blocksToMarkdown(before)) !== (await blocksToMarkdown(blocks))) {
+        await rpc("mcp_create_version", { p_page: p.id, p_title: p.title, p_content: before, p_source: source, p_label: label });
+      }
+      return applyBlocks(d, blocks);
+    });
     await rpc("mcp_save_page", { p_page: p.id, p_content: blocksOf(doc), p_ydoc: encodeDoc(doc) });
     return stats;
   }
@@ -347,6 +354,41 @@ export function createNewtionMcp(token: string) {
     }
     if (title != null) await rpc("mcp_save_page", { p_page: row_id, p_title: title });
     return text("수정했습니다.");
+  }));
+
+  server.registerTool("list_versions", {
+    title: "버전 기록 보기",
+    description: "페이지의 버전 기록(시간·종류·편집자)을 최신순으로 보여줍니다. 버전은 편집을 다시 시작할 때, 수동 저장, AI 정리·Claude 수정·복원 직전에 남습니다.",
+    inputSchema: { page_id: z.string().uuid() },
+    annotations: { readOnlyHint: true },
+  }, guard(async ({ page_id }: { page_id: string }) => {
+    const vs = await rpc<{ id: string; created_at: string; source: string; label: string | null; title: string; edited_by: string | null }[]>(
+      "mcp_list_versions", { p_page: page_id });
+    if (!vs.length) return text("저장된 버전이 없습니다.");
+    const src: Record<string, string> = { auto: "자동 저장", manual: "직접 저장", tidy: "AI 정리 전", mcp: "Claude 수정 전", restore: "복원 전" };
+    return text(vs.map((v) => `- ${new Date(v.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })} · ${src[v.source] ?? v.source}${v.label ? ` · ${v.label}` : ""} · ${v.edited_by ?? "알 수 없음"} 편집 · "${v.title}" id=${v.id}`).join("\n"));
+  }));
+
+  server.registerTool("read_version", {
+    title: "버전 내용 보기",
+    description: "특정 버전의 제목과 본문(Markdown)을 보여줍니다.",
+    inputSchema: { version_id: z.string().uuid() },
+    annotations: { readOnlyHint: true },
+  }, guard(async ({ version_id }: { version_id: string }) => {
+    const v = await rpc<{ title: string; content: AnyBlock[]; created_at: string }>("mcp_get_version", { p_version: version_id });
+    return text([`# ${v.title || "제목 없음"} (${new Date(v.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })} 버전)`, "", await blocksToMarkdown(v.content ?? [])].join("\n"));
+  }));
+
+  server.registerTool("restore_version", {
+    title: "버전 복원",
+    description: "페이지를 지정한 버전의 내용(과 제목)으로 되돌립니다. 지금 상태는 '복원 전' 버전으로 남아 다시 되돌릴 수 있습니다.",
+    inputSchema: { version_id: z.string().uuid() },
+  }, guard(async ({ version_id }: { version_id: string }) => {
+    const v = await rpc<{ page_id: string; title: string; content: AnyBlock[] }>("mcp_get_version", { p_version: version_id });
+    const p = await getPage(v.page_id);
+    const s = await writeBody(p, v.content ?? [], "restore");
+    if (v.title !== p.title) await rpc("mcp_save_page", { p_page: p.id, p_title: v.title });
+    return text(`복원했습니다: 블록 ${s.removed}개 → ${s.added}개 교체${v.title !== p.title ? ", 제목도 되돌림" : ""}. ${pageUrl(p)}`);
   }));
 
   server.registerTool("add_comment", {

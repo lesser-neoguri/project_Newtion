@@ -17,7 +17,13 @@ export interface TidyResult extends TidyResultT {
   usage: { input: number; output: number };
 }
 
-export function useTidy(editor: BlockNoteEditor | null, pageId: string, pageTitle: string) {
+export function useTidy(
+  editor: BlockNoteEditor | null,
+  pageId: string,
+  pageTitle: string,
+  /** Called right before an AI result replaces content (used to keep a version). */
+  onBeforeApply?: (label: string) => void,
+) {
   const [open, setOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
   const [mode, setMode] = useState<TidyMode>("tidy");
@@ -117,6 +123,7 @@ export function useTidy(editor: BlockNoteEditor | null, pageId: string, pageTitl
         const ok = confirm("선택한 부분이 그 사이 바뀌었습니다 (다른 사람이 편집했을 수 있어요). 적용하면 그 변경 내용이 덮어써집니다. 계속할까요?");
         if (!ok) return;
       }
+      onBeforeApply?.("AI 선택 수정 전");
       editor.replaceBlocks(existing.map((b) => b.id), blocks);
       setAttachment(null);
       setRunAttachment(null);
@@ -126,6 +133,7 @@ export function useTidy(editor: BlockNoteEditor | null, pageId: string, pageTitl
         const ok = confirm("정리를 시작한 뒤 문서가 바뀌었습니다 (다른 사람이 편집했을 수 있어요). 적용하면 그 변경 내용이 덮어써집니다. 계속할까요?");
         if (!ok) return;
       }
+      onBeforeApply?.("AI 정리 전");
       editor.replaceBlocks(editor.document, blocks);
     }
     setInstruction("");
@@ -268,7 +276,7 @@ function BlockView({
 
 /** Removes Markdown spelling differences that don't change the document
  *  (BlockNote exports "* item" and escapes brackets; Claude writes "- item"). */
-function normalizeMd(md: string) {
+export function normalizeMd(md: string) {
   return md
     .split("\n")
     .map((l) =>
@@ -331,18 +339,29 @@ function buildRows(lines: DiffLine[]): Row[] {
       });
       if (best >= 0) { usedAdd.add(best); paired.set(di, best); }
     });
-    // Removed lines first, then the new lines (edited ones shown inline).
-    dels.forEach((d, k) => { if (!paired.has(k)) rows.push({ t: "del", line: d }); });
+    // New lines in order (edited ones inline); removed lines stay where they were.
     const delByAdd = new Map([...paired].map(([d, a]) => [a, d]));
+    let nextDel = 0;
+    const flushDelsBefore = (limit: number) => {
+      for (; nextDel < limit; nextDel++) if (!paired.has(nextDel)) rows.push({ t: "del", line: dels[nextDel] });
+    };
     adds.forEach((a, ai) => {
       const d = delByAdd.get(ai);
-      rows.push(d !== undefined ? { t: "change", del: dels[d], add: a } : { t: "add", line: a });
+      if (d !== undefined) {
+        flushDelsBefore(d);
+        if (nextDel === d) nextDel++;
+        rows.push({ t: "change", del: dels[d], add: a });
+      } else rows.push({ t: "add", line: a });
     });
+    flushDelsBefore(dels.length);
   }
   return rows;
 }
 
 function similarity(a: string, b: string) {
+  const ta = a.trim(), tb = b.trim();
+  // A line that only grew or shrank at the end is an edit of the other.
+  if (ta && tb && (ta.startsWith(tb) || tb.startsWith(ta))) return 1;
   const A = new Set(a.split(/\s+/).filter(Boolean));
   const B = new Set(b.split(/\s+/).filter(Boolean));
   if (!A.size || !B.size) return 0;
@@ -430,15 +449,50 @@ function Cell({
   );
 }
 
+/** Review of an AI tidy result (original ↔ tidied). */
 export function TidyReview({ tidy }: { tidy: TidyState }) {
-  const { original, result } = tidy;
+  if (!tidy.result) return null;
+  const att = tidy.runAttachment;
+  return (
+    <CompareDocs
+      original={tidy.original}
+      revised={tidy.result.markdown}
+      notes={tidy.result.notes}
+      summary={tidy.result.summary}
+      nothingText={att ? "선택한 부분에서 바꿀 곳이 없었어요." : "고칠 부분이 없었어요. 문서가 이미 잘 정리되어 있어요."}
+      labels={["원본", "정리본"]}
+      context={att ? (
+        <div className="flex items-center gap-1.5 text-xs text-muted">
+          <Paperclip size={12} /> 선택한 부분만 바꿉니다{tidy.instruction ? ` · “${tidy.instruction.length > 40 ? tidy.instruction.slice(0, 40) + "…" : tidy.instruction}”` : ""}
+        </div>
+      ) : null}
+    />
+  );
+}
+
+/**
+ * Notion-style comparison of two versions of a document (Markdown):
+ * side by side on desktop, swipeable on phones, with inline word-level changes.
+ */
+export function CompareDocs({
+  original, revised, notes = [], summary, nothingText, labels, context, icon = "✨",
+}: {
+  original: string;
+  revised: string;
+  notes?: Note[];
+  summary?: string;
+  nothingText: string;
+  labels: [string, string];
+  context?: React.ReactNode;
+  icon?: string;
+}) {
   const [onlyChanges, setOnlyChanges] = useState(false);
   const [pane, setPane] = useState(0);
   const scroller = useRef<HTMLDivElement>(null);
 
   const lines = useMemo(
-    () => (result ? diffLines(normalizeMd(original), normalizeMd(result.markdown)) : []),
-    [original, result],
+    () => diffLines(normalizeMd(original), normalizeMd(revised)),
+    [original, revised],
   );
   // Blank Markdown lines are only separators; leave them out of the review.
   const rows = useMemo(
@@ -466,22 +520,21 @@ export function TidyReview({ tidy }: { tidy: TidyState }) {
   // Attach each note to the visible line it points at (or the next one, if it points at a blank line).
   const notesByLine = useMemo(() => {
     const m = new Map<number, Note[]>();
-    for (const n of result?.notes ?? []) {
+    for (const n of notes) {
       if (n.line <= 0) continue;
       const target = visibleNewNos.find((no) => no >= n.line) ?? visibleNewNos[visibleNewNos.length - 1];
       if (target != null) m.set(target, [...(m.get(target) ?? []), n]);
     }
     return m;
-  }, [result, visibleNewNos]);
-  if (!result) return null;
+  }, [notes, visibleNewNos]);
 
   const counts = {
     changed: rows.filter((r) => r.t === "change").length,
     added: rows.filter((r) => r.t === "add").length,
     removed: rows.filter((r) => r.t === "del").length,
-    error: result.notes.filter((n) => n.severity === "error").length,
+    error: notes.filter((n) => n.severity === "error").length,
   };
-  const generalNotes = result.notes.filter((n) => n.line <= 0 || !visibleNewNos.length);
+  const generalNotes = notes.filter((n) => n.line <= 0 || !visibleNewNos.length);
   const nothing = counts.changed + counts.added + counts.removed === 0;
   const newNoOf = (r: Row) => (r.t === "change" ? r.add.newNo : r.t === "same" || r.t === "add" ? r.line.newNo : undefined);
 
@@ -507,14 +560,10 @@ export function TidyReview({ tidy }: { tidy: TidyState }) {
     <div className="pb-40">
       {/* Summary */}
       <div className="mb-5 flex gap-3 rounded-lg bg-hover px-4 py-3 text-sm">
-        <span className="leading-6">✨</span>
+        <span className="leading-6">{icon}</span>
         <div className="min-w-0 flex-1 space-y-1.5">
-          {tidy.runAttachment && (
-            <div className="flex items-center gap-1.5 text-xs text-muted">
-              <Paperclip size={12} /> 선택한 부분만 바꿉니다{tidy.instruction ? ` · “${tidy.instruction.length > 40 ? tidy.instruction.slice(0, 40) + "…" : tidy.instruction}”` : ""}
-            </div>
-          )}
-          <p className="leading-relaxed">{nothing ? (tidy.runAttachment ? "선택한 부분에서 바꿀 곳이 없었어요." : "고칠 부분이 없었어요. 문서가 이미 잘 정리되어 있어요.") : result.summary}</p>
+          {context}
+          <p className="leading-relaxed">{nothing ? nothingText : summary ?? "바뀐 부분을 확인하세요."}</p>
           {!nothing && (
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
               <span>수정 {counts.changed}</span>
@@ -538,8 +587,8 @@ export function TidyReview({ tidy }: { tidy: TidyState }) {
       {/* Desktop: original and tidied side by side, rows aligned */}
       <div className="hidden md:block">
         <div className="sticky top-0 z-10 mb-2 grid grid-cols-2 gap-8 border-b border-line bg-background py-2 text-xs font-medium text-muted">
-          <span>원본</span>
-          <span>정리본</span>
+          <span>{labels[0]}</span>
+          <span>{labels[1]}</span>
         </div>
         <div className="text-[15px] leading-7">
           {shown.map((r, idx) =>
@@ -557,7 +606,7 @@ export function TidyReview({ tidy }: { tidy: TidyState }) {
       <div className="md:hidden">
         <div className="sticky top-0 z-10 -mx-4 mb-3 flex items-center gap-2 border-b border-line bg-background px-4 py-2">
           <div className="flex rounded-lg bg-hover p-0.5 text-sm">
-            {["원본", "정리본"].map((label, i) => (
+            {labels.map((label, i) => (
               <button
                 key={label}
                 onClick={() => goTo(i)}
@@ -567,7 +616,7 @@ export function TidyReview({ tidy }: { tidy: TidyState }) {
               </button>
             ))}
           </div>
-          <span className="ml-auto text-xs text-muted">{pane === 0 ? "넘겨서 정리본 보기 →" : "← 넘겨서 원본 보기"}</span>
+          <span className="ml-auto text-xs text-muted">{pane === 0 ? `넘겨서 ${labels[1]} 보기 →` : `← 넘겨서 ${labels[0]} 보기`}</span>
         </div>
         <div
           ref={scroller}
