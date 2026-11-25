@@ -17,6 +17,7 @@ import { TidyBar, TidyReview, useTidy } from "./tidy";
 import { VersionPreview, useSnapshot, type PageVersion } from "./versions";
 import { VersionMap, type Commit } from "./version-map";
 import { BranchBanner, useBranching } from "./branching";
+import { TocButton, TocRail, useToc } from "./toc";
 import type { BlockNoteEditor } from "./editor";
 import { aiHub } from "@/lib/ai-hub";
 import { selectionToAttachment } from "@/lib/selection";
@@ -55,6 +56,8 @@ export function PageView({ pageId }: { pageId: string }) {
     setEdState((prev) => (ed ? { ed, key: mountedKey } : prev.key === mountedKey ? { ed: null, key: mountedKey } : prev));
   }, [mountedKey]);
   const inBranch = !!br.branchId;
+  const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
+  const toc = useToc(editor);
   const tidy = useTidy(editor, pageId, page?.title ?? "", (label) => {
     // On a branch, the branch's commits are the history; don't touch main.
     if (!inBranch) void snapshot("tidy", label).then(bumpVersions);
@@ -197,7 +200,7 @@ export function PageView({ pageId }: { pageId: string }) {
 
   return (
     <div className="flex h-full">
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="@container flex min-w-0 flex-1 flex-col">
         {/* Top bar */}
         <header className="page-topbar flex h-11 shrink-0 items-center gap-1 pl-11 pr-2 text-sm md:gap-2 md:px-3">
           <nav className="flex min-w-0 flex-1 items-center gap-0.5 text-muted">
@@ -232,6 +235,7 @@ export function PageView({ pageId }: { pageId: string }) {
               <Avatar key={v.user_id} ring size={24} profile={{ display_name: v.name, avatar_color: v.color, email: "" }} />
             ))}
           </div>
+          {page.kind !== "database" && !tidy.reviewing && !previewVersion && <TocButton items={toc} scroller={scroller} />}
           <button title="댓글" onClick={() => setShowComments((v) => !v)} className={`rounded p-1.5 hover:bg-hover ${showComments ? "bg-hover" : ""}`}>
             <MessageSquare size={16} />
           </button>
@@ -287,7 +291,8 @@ export function PageView({ pageId }: { pageId: string }) {
           </div>
         )}
 
-        <div className="scrollbar-thin flex-1 overflow-y-auto">
+        <div ref={setScroller} className="scrollbar-thin flex-1 overflow-y-auto">
+          {page.kind !== "database" && !tidy.reviewing && !previewVersion && <TocRail items={toc} scroller={scroller} />}
           {/* Cover */}
           {page.cover && (
             <div className="group relative h-32 w-full md:h-48" style={{ background: page.cover }}>
