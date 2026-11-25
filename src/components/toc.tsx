@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ListTree } from "lucide-react";
+import { ChevronDown, ChevronUp, ListTree } from "lucide-react";
+import { useKeyboardOpen } from "./chat-widget";
 import { Popover } from "./ui";
 import type { BlockNoteEditor } from "./editor";
 
@@ -147,7 +148,7 @@ export function TocButton({ items, scroller }: { items: TocItem[]; scroller: HTM
   const jump = useJump(scroller);
   if (items.length < 2) return null;
   return (
-    <div className="relative @[1000px]:hidden">
+    <div className="relative hidden md:block @[1000px]:hidden">
       <button title="목차" onClick={() => setOpen(true)} className={`rounded p-1.5 hover:bg-hover ${open ? "bg-hover" : ""}`}>
         <ListTree size={16} />
       </button>
@@ -157,6 +158,77 @@ export function TocButton({ items, scroller }: { items: TocItem[]; scroller: HTM
           <TocList items={items} active={active} onJump={(id) => { setOpen(false); jump(id); }} />
         </div>
       </Popover>
+    </div>
+  );
+}
+
+/**
+ * Phones: a small pill at the bottom center showing the current section, with ▲▼ to step
+ * between sections. Tapping it opens a half-height sheet with the whole outline.
+ */
+export function TocDock({ items, scroller }: { items: TocItem[]; scroller: HTMLElement | null }) {
+  const active = useActive(items, scroller);
+  const jump = useJump(scroller);
+  const keyboard = useKeyboardOpen();
+  const [open, setOpen] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    document.body.dataset.tocSheet = "1"; // hides the floating AI button
+    listRef.current?.querySelector<HTMLElement>("[data-active=true]")?.scrollIntoView({ block: "center" });
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => { window.removeEventListener("keydown", onKey); delete document.body.dataset.tocSheet; };
+  }, [open]);
+
+  if (items.length < 2 || keyboard) return null;
+  const idx = Math.max(0, items.findIndex((i) => i.id === active));
+  const cur = items[idx];
+  const min = Math.min(...items.map((i) => i.level));
+  const step = "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted active:bg-hover disabled:opacity-30";
+
+  return (
+    <div className="md:hidden">
+      {!open && (
+        <div className="toc-dock fixed bottom-[max(1.25rem,calc(env(safe-area-inset-bottom)+0.25rem))] left-1/2 z-[80] flex max-w-[calc(100vw-10rem)] -translate-x-1/2 items-center rounded-full border border-line bg-background/95 shadow-lg backdrop-blur">
+          <button aria-label="이전 섹션" className={step} disabled={idx === 0} onClick={() => jump(items[idx - 1].id)}>
+            <ChevronUp size={16} />
+          </button>
+          <button onClick={() => setOpen(true)} className="flex min-w-0 items-center gap-1.5 px-1 py-2 text-[13px]">
+            <ListTree size={14} className="shrink-0 text-muted" />
+            <span className="truncate font-medium">{cur.text}</span>
+            <span className="shrink-0 text-[11px] text-muted tabular-nums">{idx + 1}/{items.length}</span>
+          </button>
+          <button aria-label="다음 섹션" className={step} disabled={idx === items.length - 1} onClick={() => jump(items[idx + 1].id)}>
+            <ChevronDown size={16} />
+          </button>
+        </div>
+      )}
+      {open && (
+        <div className="fixed inset-0 z-[95]">
+          <div className="absolute inset-0 bg-black/20" onClick={() => setOpen(false)} />
+          <div className="absolute inset-x-0 bottom-0 flex max-h-[55vh] flex-col rounded-t-2xl border-t border-line bg-background pb-[env(safe-area-inset-bottom)] shadow-2xl">
+            <button onClick={() => setOpen(false)} aria-label="닫기" className="flex justify-center py-2.5">
+              <span className="h-1 w-10 rounded-full bg-foreground/15" />
+            </button>
+            <div className="px-5 pb-1 text-xs font-semibold text-muted">목차</div>
+            <div ref={listRef} className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+              {items.map((it) => (
+                <button
+                  key={it.id}
+                  data-active={it.id === active}
+                  onClick={() => { setOpen(false); jump(it.id); }}
+                  style={{ paddingLeft: 12 + (it.level - min) * 14 }}
+                  className={`flex w-full items-center rounded-lg py-2.5 pr-3 text-left text-[15px] active:bg-hover ${it.id === active ? "bg-hover font-medium text-accent" : it.level === min ? "" : "text-muted"}`}
+                >
+                  <span className="truncate">{it.text}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

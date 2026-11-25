@@ -17,7 +17,7 @@ import { TidyBar, TidyReview, useTidy } from "./tidy";
 import { VersionPreview, useSnapshot, type PageVersion } from "./versions";
 import { VersionMap, type Commit } from "./version-map";
 import { BranchBanner, useBranching } from "./branching";
-import { TocButton, TocRail, useToc } from "./toc";
+import { TocButton, TocDock, TocRail, useToc } from "./toc";
 import type { BlockNoteEditor } from "./editor";
 import { aiHub } from "@/lib/ai-hub";
 import { selectionToAttachment } from "@/lib/selection";
@@ -293,6 +293,7 @@ export function PageView({ pageId }: { pageId: string }) {
 
         <div ref={setScroller} className="scrollbar-thin flex-1 overflow-y-auto">
           {page.kind !== "database" && !tidy.reviewing && !previewVersion && <TocRail items={toc} scroller={scroller} />}
+          {page.kind !== "database" && !tidy.reviewing && !previewVersion && !showVersions && <TocDock items={toc} scroller={scroller} />}
           {/* Cover */}
           {page.cover && (
             <div className="group relative h-32 w-full md:h-48" style={{ background: page.cover }}>

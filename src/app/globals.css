@@ -135,3 +135,7 @@ body[data-vmap] .chat-fab { display: none; }
 @media (min-width: 768px) {
   main[data-collapsed] .page-topbar { padding-left: 2.75rem; }
 }
+
+/* The AI tidy bar takes the bottom of the screen. */
+body.tidy-open .toc-dock { display: none; }
+body[data-toc-sheet] .chat-fab { display: none; }

@@ -306,7 +306,7 @@ function AiMenuItem({
 }
 
 /** True while an on-screen keyboard covers part of the screen (phones). */
-function useKeyboardOpen() {
+export function useKeyboardOpen() {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     const vv = window.visualViewport;
