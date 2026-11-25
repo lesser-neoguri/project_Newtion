@@ -127,3 +127,6 @@ body.tidy-open .chat-fab {
     background: transparent !important;
   }
 }
+
+/* Version map open: the node card needs the bottom-right corner. */
+body[data-vmap] .chat-fab { display: none; }

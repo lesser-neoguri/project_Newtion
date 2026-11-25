@@ -37,6 +37,8 @@ interface Props {
   onEditor?: (editor: BlockNoteEditor | null) => void;
   /** Called when the user sends the current selection to the AI. */
   onAskAI?: (attachment: SelectionAttachment) => void;
+  /** Edit a branch's working copy instead of the page (own realtime room, saved to page_branches). */
+  branchId?: string;
 }
 
 /** True on phones/tablets (touch as the main input). */
@@ -89,7 +91,8 @@ export default function CollaborativeEditor(props: Props) {
         console.error("Failed to load stored ydoc", e);
       }
     }
-    const provider = new SupabaseYProvider(props.sb, props.pageId, doc);
+    const room = props.branchId ? `branch:${props.branchId}` : props.pageId;
+    const provider = new SupabaseYProvider(props.sb, room, doc);
     setSession({ doc, provider });
     return () => {
       provider.destroy();
@@ -98,10 +101,10 @@ export default function CollaborativeEditor(props: Props) {
     };
     // Re-create only when switching pages
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.pageId]);
+  }, [props.pageId, props.branchId]);
 
   if (!session) return null;
-  return <EditorInner key={props.pageId} {...props} doc={session.doc} provider={session.provider} />;
+  return <EditorInner key={props.branchId ?? props.pageId} {...props} doc={session.doc} provider={session.provider} />;
 }
 
 /** True when a document has no blocks, or only empty paragraphs. */
@@ -130,7 +133,7 @@ function useColorScheme() {
 }
 
 function EditorInner({
-  sb, pageId, workspaceId, initialContent, me, editable, onSaveState, onEditor, onAskAI, doc, provider,
+  sb, pageId, workspaceId, initialContent, me, editable, onSaveState, onEditor, onAskAI, branchId, doc, provider,
 }: Props & { doc: Y.Doc; provider: SupabaseYProvider }) {
   const theme = useColorScheme();
   const coarse = useCoarsePointer();
@@ -181,9 +184,9 @@ function EditorInner({
       dirty.current = false;
       onSaveState?.("saving");
       const { error } = await sb
-        .from("pages")
+        .from(branchId ? "page_branches" : "pages")
         .update({ ydoc: toB64(Y.encodeStateAsUpdate(doc)), content: editor.document })
-        .eq("id", pageId);
+        .eq("id", branchId ?? pageId);
       onSaveState?.(error ? "error" : "saved");
       if (error) dirty.current = true;
     };
@@ -201,7 +204,7 @@ function EditorInner({
       if (timer.current) clearTimeout(timer.current);
       void save();
     };
-  }, [doc, provider, editor, editable, sb, pageId, onSaveState]);
+  }, [doc, provider, editor, editable, sb, pageId, branchId, onSaveState]);
 
   // Phones: keep the caret / selection above the docked toolbar while the keyboard is open.
   useEffect(() => {

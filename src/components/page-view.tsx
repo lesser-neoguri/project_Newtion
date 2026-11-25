@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ChevronRight, FileText, History, ImageIcon, Link2, MessageSquare, MoreHorizontal, Plus, Smile, Star, Table2, Trash2,
   RotateCcw, LayoutTemplate,
@@ -14,7 +14,9 @@ import { DatabaseView } from "./database-view";
 import { PropertyCell } from "./property-cell";
 import { CommentsPanel } from "./comments";
 import { TidyBar, TidyReview, useTidy } from "./tidy";
-import { VersionPreview, VersionsPanel, useSnapshot, type PageVersion } from "./versions";
+import { VersionPreview, useSnapshot, type PageVersion } from "./versions";
+import { VersionMap, type Commit } from "./version-map";
+import { BranchBanner, useBranching } from "./branching";
 import type { BlockNoteEditor } from "./editor";
 import { aiHub } from "@/lib/ai-hub";
 import { selectionToAttachment } from "@/lib/selection";
@@ -34,16 +36,31 @@ export function PageView({ pageId }: { pageId: string }) {
   const [saveState, setSaveState] = useState<"saving" | "saved" | "error" | null>(null);
   const [menu, setMenu] = useState(false);
   const [iconPicker, setIconPicker] = useState(false);
-  const [editor, setEditor] = useState<BlockNoteEditor | null>(null);
+  // Remember which document (main or a branch) the editor instance belongs to,
+  // so a stale editor is never used after switching between them.
+  const [edState, setEdState] = useState<{ ed: BlockNoteEditor | null; key: string }>({ ed: null, key: "" });
   const [showVersions, setShowVersions] = useState(false);
   const [previewVersion, setPreviewVersion] = useState<PageVersion | null>(null);
   const [versionsReload, setVersionsReload] = useState(0);
+  const [mapKey, setMapKey] = useState<string | null>(null);
+  const branchParam = useSearchParams().get("branch");
+  const edKey = branchParam ?? "main";
+  const editor = edState.key === edKey ? edState.ed : null;
   const snapshot = useSnapshot(page, editor);
+  const bumpVersions = useCallback(() => setVersionsReload((k) => k + 1), []);
+  const br = useBranching(page, editor, bumpVersions);
+  const mountedKey = br.branch?.id ?? "main"; // what the mounted editor actually shows
+  const onEditor = useCallback((ed: BlockNoteEditor | null) => {
+    // An unmounting editor reports null; only clear if it's still the one we hold.
+    setEdState((prev) => (ed ? { ed, key: mountedKey } : prev.key === mountedKey ? { ed: null, key: mountedKey } : prev));
+  }, [mountedKey]);
+  const inBranch = !!br.branchId;
   const tidy = useTidy(editor, pageId, page?.title ?? "", (label) => {
-    void snapshot("tidy", label).then(() => setVersionsReload((k) => k + 1));
+    // On a branch, the branch's commits are the history; don't touch main.
+    if (!inBranch) void snapshot("tidy", label).then(bumpVersions);
   });
   const { attach: tidyAttach, setOpen: setTidyOpen, setAttachment: setTidyAttachment } = tidy;
-  const aiEditable = !!page && canEdit && !page.archived_at && page.kind !== "database";
+  const aiEditable = !!page && canEdit && !page.archived_at && page.kind !== "database" && (!inBranch || br.branchEditable);
 
   // Offer this page's AI actions to the floating AI button.
   useEffect(() => {
@@ -140,7 +157,27 @@ export function PageView({ pageId }: { pageId: string }) {
   }
   const viewers = online.filter((u) => u.page_id === pageId);
   const childPages = pages.filter((p) => p.parent_id === pageId);
-  const editable = canEdit && !page.archived_at;
+  const mainEditable = canEdit && !page.archived_at;
+  const editable = inBranch ? mainEditable && br.branchEditable : mainEditable;
+
+  const loadVersion = async (c: Commit) => {
+    const { data } = await sb.from("page_versions").select("content").eq("id", c.id).single();
+    return { ...c, content: (data?.content as unknown[]) ?? [] } as PageVersion;
+  };
+  const restoreVersion = async (v: PageVersion) => {
+    if (!editor) return;
+    if (inBranch) {
+      if (!confirm("이 버전 내용을 지금 브랜치에 불러올까요? 커밋하기 전까지는 브랜치 작업본만 바뀌어요.")) return;
+    } else {
+      if (!confirm("이 버전으로 메인을 복원할까요? 지금 문서는 버전으로 남아서 다시 되돌릴 수 있어요.")) return;
+      await snapshot("restore", null);
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    editor.replaceBlocks(editor.document, v.content as any);
+    if (!inBranch && v.title !== page.title) await patch({ title: v.title });
+    setPreviewVersion(null);
+    bumpVersions();
+  };
   const lastEditor = page.updated_by ? memberMap.get(page.updated_by) : undefined;
 
   const schemaForRow: DbSchema | null = parentDb?.db_schema ?? null;
@@ -209,7 +246,7 @@ export function PageView({ pageId }: { pageId: string }) {
               </MenuItem>
               {page.kind !== "database" && (
                 <MenuItem onClick={() => { setMenu(false); setShowComments(false); setShowVersions(true); }}>
-                  <History size={14} /> 버전 기록
+                  <History size={14} /> 버전 맵
                 </MenuItem>
               )}
               {canEdit && page.kind === "doc" && (
@@ -288,8 +325,12 @@ export function PageView({ pageId }: { pageId: string }) {
               </Popover>
             </div>
 
+            {inBranch && (
+              <BranchBanner b={br} ownerName={br.branch ? memberMap.get(br.branch.owner_id)?.display_name ?? "?" : ""} />
+            )}
+
             {/* Title */}
-            <TitleArea value={page.title} editable={editable} onChange={onTitle} />
+            <TitleArea value={inBranch ? br.branch?.title ?? page.title : page.title} editable={editable && !inBranch} onChange={onTitle} />
 
             {/* Row properties */}
             {page.kind === "row" && schemaForRow && (
@@ -318,19 +359,23 @@ export function PageView({ pageId }: { pageId: string }) {
               <>
                 {/* Editor stays mounted while reviewing so Apply can write through it. */}
                 <div className={tidy.reviewing || previewVersion ? "hidden" : ""}>
+                {inBranch && !br.branch ? <Spinner /> : (
                 <CollaborativeEditor
+                  key={br.branch?.id ?? "main"}
                   sb={sb}
                   pageId={pageId}
+                  branchId={br.branch?.id}
                   workspaceId={workspace.id}
-                  initialYdoc={page.ydoc}
-                  initialContent={page.content}
+                  initialYdoc={br.branch ? br.branch.ydoc : page.ydoc}
+                  initialContent={br.branch ? br.branch.content : page.content}
                   me={me}
                   editable={editable}
                   onSaveState={setSaveState}
-                  onEditor={setEditor}
+                  onEditor={onEditor}
                   onAskAI={tidy.attach}
                 />
-                {page.kind === "doc" && (
+                )}
+                {page.kind === "doc" && !inBranch && (
                   <SubPages pageId={pageId} childPages={childPages} canEdit={editable} />
                 )}
                 </div>
@@ -342,16 +387,7 @@ export function PageView({ pageId }: { pageId: string }) {
                     currentTitle={page.title}
                     canEdit={editable}
                     onClose={() => setPreviewVersion(null)}
-                    onRestore={async () => {
-                      if (!editor) return;
-                      if (!confirm("이 버전으로 복원할까요? 지금 문서는 버전 기록에 남아서 다시 되돌릴 수 있어요.")) return;
-                      await snapshot("restore", null);
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      editor.replaceBlocks(editor.document, previewVersion.content as any);
-                      if (previewVersion.title !== page.title) await patch({ title: previewVersion.title });
-                      setPreviewVersion(null);
-                      setVersionsReload((k) => k + 1);
-                    }}
+                    onRestore={() => restoreVersion(previewVersion)}
                   />
                 )}
               </>
@@ -362,23 +398,30 @@ export function PageView({ pageId }: { pageId: string }) {
       </div>
       {showComments && <CommentsPanel pageId={pageId} onClose={() => setShowComments(false)} />}
       {showVersions && !showComments && (
-        <VersionsPanel
+        <VersionMap
           pageId={pageId}
-          canEdit={editable}
-          selectedId={previewVersion?.id ?? null}
+          canEdit={mainEditable}
+          currentBranchId={br.branchId}
           reloadKey={versionsReload}
-          onSelect={(v) => {
-            setPreviewVersion(v);
-            // Phones: the list covers the screen, so close it to show the comparison.
+          selectedKey={mapKey}
+          onSelect={(s) => setMapKey(s ? (s.kind === "commit" ? s.commit.id : `head:${s.branch?.id ?? "main"}`) : null)}
+          onPreview={async (c) => {
+            setPreviewVersion(await loadVersion(c));
+            // Phones: the map covers the screen, so close it to show the comparison.
             if (window.matchMedia("(max-width: 767px)").matches) setShowVersions(false);
           }}
+          onFork={(from) => { setPreviewVersion(null); void br.fork(from); }}
+          onRestore={async (c) => { await restoreVersion(await loadVersion(c)); }}
+          onOpenBranch={(b) => { setPreviewVersion(null); br.openBranch(b); }}
+          onMerge={(b) => { setPreviewVersion(null); void br.merge(b); }}
+          onCloseBranch={(b) => void br.closeBranch(b)}
           onSaveNow={async () => {
             const name = prompt("버전 이름 (비워 두면 이름 없이 저장)", "");
             if (name === null) return;
             await snapshot("manual", name.trim() || null);
-            setVersionsReload((k) => k + 1);
+            bumpVersions();
           }}
-          onClose={() => { setShowVersions(false); setPreviewVersion(null); }}
+          onClose={() => { setShowVersions(false); setPreviewVersion(null); setMapKey(null); }}
         />
       )}
     </div>

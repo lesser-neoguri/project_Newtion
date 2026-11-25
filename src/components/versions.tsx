@@ -12,7 +12,7 @@ export interface PageVersion {
   id: string;
   title: string;
   content: unknown[];
-  source: "auto" | "manual" | "tidy" | "mcp" | "restore";
+  source: "auto" | "manual" | "tidy" | "mcp" | "restore" | "commit" | "merge" | "fork";
   label: string | null;
   edited_by: string | null;
   edited_at: string;
@@ -26,6 +26,9 @@ const SOURCE_LABEL: Record<PageVersion["source"], string> = {
   tidy: "AI 정리 전",
   mcp: "Claude 수정 전",
   restore: "복원 전",
+  commit: "커밋",
+  merge: "머지",
+  fork: "브랜치 시작점",
 };
 
 const day = (iso: string) => new Date(iso).toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", weekday: "short" });
