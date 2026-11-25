@@ -39,7 +39,7 @@ export default function WorkspaceLayout({ children, params }: { children: React.
           </div>
         </div>
 
-        <main className="relative flex min-w-0 flex-1 flex-col">
+        <main data-collapsed={collapsed || undefined} className="relative flex min-w-0 flex-1 flex-col">
           {/* Mobile menu button (pages leave room for it at the top-left) */}
           <button
             onClick={() => setDrawer(true)}
@@ -49,7 +49,7 @@ export default function WorkspaceLayout({ children, params }: { children: React.
             <Menu size={20} />
           </button>
           {collapsed && (
-            <button onClick={() => setCollapsed(false)} title="사이드바 열기" className="absolute left-2 top-2 z-10 hidden rounded p-1.5 text-muted hover:bg-hover md:block">
+            <button onClick={() => setCollapsed(false)} title="사이드바 열기" className="absolute left-2 top-1.5 z-20 hidden rounded p-1.5 text-muted hover:bg-hover md:block">
               <PanelLeftOpen size={16} />
             </button>
           )}

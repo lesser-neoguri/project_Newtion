@@ -199,7 +199,7 @@ export function PageView({ pageId }: { pageId: string }) {
     <div className="flex h-full">
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Top bar */}
-        <header className="flex h-11 shrink-0 items-center gap-1 pl-11 pr-2 text-sm md:gap-2 md:px-3">
+        <header className="page-topbar flex h-11 shrink-0 items-center gap-1 pl-11 pr-2 text-sm md:gap-2 md:px-3">
           <nav className="flex min-w-0 flex-1 items-center gap-0.5 text-muted">
             {crumbs.map((c) => (
               <span key={c.id} className="hidden min-w-0 items-center gap-0.5 md:flex">

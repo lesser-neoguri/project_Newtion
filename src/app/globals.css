@@ -130,3 +130,8 @@ body.tidy-open .chat-fab {
 
 /* Version map open: the node card needs the bottom-right corner. */
 body[data-vmap] .chat-fab { display: none; }
+
+/* Desktop with the sidebar collapsed: leave room for the "open sidebar" button. */
+@media (min-width: 768px) {
+  main[data-collapsed] .page-topbar { padding-left: 2.75rem; }
+}
