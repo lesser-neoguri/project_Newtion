@@ -86,6 +86,31 @@ npm run dev
 
 ---
 
+## 🤖 Claude에서 Newtion 문서 고치기 (MCP)
+
+Claude Code나 Claude 데스크톱이 내 권한으로 Newtion 문서를 읽고 고칠 수 있습니다.
+
+1. Newtion **설정 및 멤버 → Claude 연결**에서 토큰을 발급합니다 (한 번만 표시).
+2. Claude Code:
+   ```bash
+   claude mcp add --transport http newtion https://<your-app>.vercel.app/api/mcp --header "Authorization: Bearer <토큰>"
+   ```
+   Claude 데스크톱은 설정 화면에 표시되는 `claude_desktop_config.json` 예시(mcp-remote)를 씁니다.
+3. “project_sun 기획서에서 층 종류 표에 ‘화산’ 추가해줘”처럼 요청합니다.
+
+| 도구 | 하는 일 |
+| --- | --- |
+| `list_workspaces`, `list_pages`, `search`, `read_page` | 워크스페이스·페이지 트리·검색·본문(Markdown) 읽기 |
+| `edit_page` | 본문에서 정확히 일치하는 문구를 찾아 바꾸기 |
+| `update_page`, `append_to_page` | 본문 전체 바꾸기 / 끝에 덧붙이기 |
+| `create_page`, `rename_page` | 페이지 만들기 / 제목·아이콘 바꾸기 |
+| `query_database`, `add_database_row`, `update_database_row` | 데이터베이스 보기·항목 추가·수정 (속성은 이름으로) |
+| `add_comment` | 댓글 달기 |
+
+- Claude의 수정은 공동 편집자처럼 실시간 채널로 들어가, 열려 있는 탭에 바로 나타나고 바뀐 블록만 교체됩니다.
+- 권한은 토큰 주인의 역할을 그대로 따릅니다 (뷰어는 읽기·댓글만). 권한 검사는 DB 함수(`mcp_*`) 안에서 하므로 서버에 관리자 키가 필요 없습니다.
+- 토큰은 해시만 저장되며 설정 화면에서 언제든 폐기할 수 있습니다.
+
 ## 구조
 
 ```

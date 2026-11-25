@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useWorkspace } from "@/components/workspace-context";
 import { Avatar } from "@/components/ui";
+import { ClaudeConnect } from "@/components/claude-connect";
 import type { Role } from "@/lib/types";
 
 const ROLE_LABEL: Record<Role, string> = { owner: "소유자", editor: "편집자", viewer: "뷰어" };
@@ -136,6 +137,8 @@ export default function SettingsPage() {
             </div>
           )}
         </section>
+
+        <ClaudeConnect />
 
         <section className={`${card} border-red-500/40`}>
           <h2 className="mb-3 font-semibold text-red-500">위험 구역</h2>
