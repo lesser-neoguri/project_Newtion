@@ -97,7 +97,7 @@ export async function deleteForever(sb: SupabaseClient, pageId: string) {
 }
 
 /** Phone photos are often 4000px+ and several MB: scale big ones down before upload. */
-async function shrinkImage(file: File, maxSide = 2000): Promise<File> {
+export async function shrinkImage(file: File, maxSide = 2000): Promise<File> {
   if (!/^image\/(jpeg|png|webp|heic|heif)$/.test(file.type) || file.size < 1.5 * 1024 * 1024) return file;
   try {
     const bmp = await createImageBitmap(file);

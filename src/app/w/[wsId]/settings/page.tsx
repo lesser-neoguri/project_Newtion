@@ -99,6 +99,10 @@ export default function SettingsPage() {
                   <div className="truncate text-sm font-medium">{m.profile.display_name} {m.user_id === me.id && <span className="text-muted">(나)</span>}</div>
                   <div className="truncate text-xs text-muted">{m.profile.email}</div>
                 </div>
+                {m.user_id !== me.id && (
+                  <button onClick={() => router.push(`/w/${workspace.id}/messages?with=${m.user_id}`)}
+                    className="rounded-md border border-line px-2 py-1 text-xs hover:bg-hover">메시지</button>
+                )}
                 {isOwner && m.user_id !== me.id ? (
                   <>
                     <select value={m.role} className={`${input} bg-background`} onChange={async (e) => {

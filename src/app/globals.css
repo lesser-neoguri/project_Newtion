@@ -139,3 +139,4 @@ body[data-vmap] .chat-fab { display: none; }
 /* The AI tidy bar takes the bottom of the screen. */
 body.tidy-open .toc-dock { display: none; }
 body[data-toc-sheet] .chat-fab { display: none; }
+body[data-dm] .chat-fab { display: none; }

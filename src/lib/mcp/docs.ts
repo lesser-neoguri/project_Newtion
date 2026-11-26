@@ -9,6 +9,8 @@
 import * as Y from "yjs";
 import { createClient } from "@supabase/supabase-js";
 import { ServerBlockNoteEditor } from "@blocknote/server-util";
+import { CommentsExtension, DefaultThreadStoreAuth } from "@blocknote/core/comments";
+import { YjsThreadStore } from "@blocknote/core/yjs";
 // happy-dom instead of jsdom: jsdom pulls in an ES-module dependency that the Vercel function runtime refuses to require().
 import { Window } from "happy-dom";
 import { SupabaseYProvider, fromB64, toB64 } from "@/lib/yjs-supabase";
@@ -21,7 +23,14 @@ export type AnyBlock = any;
 
 let editor: Editor | null = null;
 function ed(): Editor {
-  if (!editor) editor = ServerBlockNoteEditor.create({}, new Window().document as unknown as Document);
+  // The comments extension only adds the "comment" mark to the schema: without it, text that has an
+  // inline comment would be read as empty and an edit could wipe it.
+  if (!editor) editor = ServerBlockNoteEditor.create({
+    extensions: [CommentsExtension({
+      threadStore: new YjsThreadStore("server", new Y.Doc().getMap("threads"), new DefaultThreadStoreAuth("server", "editor")),
+      resolveUsers: async () => [],
+    })],
+  }, new Window().document as unknown as Document);
   return editor;
 }
 

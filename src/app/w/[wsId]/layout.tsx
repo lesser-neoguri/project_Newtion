@@ -7,6 +7,7 @@ import { WorkspaceProvider } from "@/components/workspace-context";
 import { Sidebar } from "@/components/sidebar";
 import { Dialogs } from "@/components/dialogs";
 import { ChatWidget } from "@/components/chat-widget";
+import { DmProvider } from "@/components/dm";
 
 export default function WorkspaceLayout({ children, params }: { children: React.ReactNode; params: Promise<{ wsId: string }> }) {
   const { wsId } = use(params);
@@ -20,6 +21,7 @@ export default function WorkspaceLayout({ children, params }: { children: React.
 
   return (
     <WorkspaceProvider workspaceId={wsId}>
+      <DmProvider>
       <div className="ws-root flex h-dvh overflow-hidden">
         {/* Desktop sidebar */}
         {!collapsed && (
@@ -58,6 +60,7 @@ export default function WorkspaceLayout({ children, params }: { children: React.
       </div>
       <Dialogs />
       <ChatWidget />
+      </DmProvider>
     </WorkspaceProvider>
   );
 }

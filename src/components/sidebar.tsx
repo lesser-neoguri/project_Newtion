@@ -5,9 +5,10 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   ChevronRight, ChevronsUpDown, FileText, LayoutTemplate, LogOut, MoreHorizontal, Plus, Search,
-  Settings, Star, Table2, Trash2, PanelLeftClose, Check,
+  Settings, Star, Table2, Trash2, PanelLeftClose, Check, MessageCircle,
 } from "lucide-react";
 import { useWorkspace } from "./workspace-context";
+import { useDm } from "./dm";
 import { Avatar, MenuItem, Popover } from "./ui";
 import { createPage, setArchived } from "@/lib/api";
 import type { PageMeta } from "@/lib/types";
@@ -35,6 +36,7 @@ function useExpanded() {
 
 export function Sidebar({ onCollapse }: { onCollapse: () => void }) {
   const ws = useWorkspace();
+  const dm = useDm();
   const { sb, me, workspace, workspaces, pages, favorites, canEdit, online, ui } = ws;
   const router = useRouter();
   const [wsMenu, setWsMenu] = useState(false);
@@ -97,6 +99,7 @@ export function Sidebar({ onCollapse }: { onCollapse: () => void }) {
 
       <nav className="space-y-0.5 px-2">
         <NavButton icon={<Search size={16} />} label="검색" hint="⌘K" onClick={() => ui.setSearchOpen(true)} />
+        <NavButton icon={<MessageCircle size={16} />} label="메시지" badge={dm.unread} onClick={() => router.push(`/w/${workspace.id}/messages`)} />
         <NavButton icon={<LayoutTemplate size={16} />} label="템플릿" onClick={() => ui.setTemplatesOpen({ parentId: null })} />
         <NavButton icon={<Settings size={16} />} label="설정 및 멤버" onClick={() => router.push(`/w/${workspace.id}/settings`)} />
         <NavButton icon={<Trash2 size={16} />} label="휴지통" onClick={() => ui.setTrashOpen(true)} />
@@ -142,12 +145,13 @@ export function Sidebar({ onCollapse }: { onCollapse: () => void }) {
   );
 }
 
-function NavButton({ icon, label, hint, onClick }: { icon: React.ReactNode; label: string; hint?: string; onClick: () => void }) {
+function NavButton({ icon, label, hint, badge, onClick }: { icon: React.ReactNode; label: string; hint?: string; badge?: number; onClick: () => void }) {
   return (
     <button onClick={onClick} className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-foreground/80 hover:bg-hover">
       <span className="text-muted">{icon}</span>
       {label}
       {hint && <span className="ml-auto text-xs text-muted">{hint}</span>}
+      {!!badge && <span className="ml-auto rounded-full bg-red-500 px-1.5 text-[11px] font-semibold leading-[18px] text-white">{badge > 99 ? "99+" : badge}</span>}
     </button>
   );
 }

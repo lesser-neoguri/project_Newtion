@@ -2,7 +2,7 @@
 
 import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Y from "yjs";
 import {
   FormattingToolbar,
@@ -15,7 +15,9 @@ import {
 } from "@blocknote/react";
 import { ImagePlus, Sparkles } from "lucide-react";
 import { BlockNoteView } from "@blocknote/mantine";
-import { withCollaboration } from "@blocknote/core/yjs";
+import { withCollaboration, YjsThreadStore } from "@blocknote/core/yjs";
+import { CommentsExtension, DefaultThreadStoreAuth } from "@blocknote/core/comments";
+import { useWorkspace } from "./workspace-context";
 import { ko } from "@blocknote/core/locales";
 import type { BlockNoteEditor, PartialBlock } from "@blocknote/core";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -137,6 +139,24 @@ function ImageButton() {
   );
 }
 
+/** Read-only access to comment threads. */
+class ViewerThreadAuth extends DefaultThreadStoreAuth {
+  constructor(userId: string) { super(userId, "comment"); }
+  canCreateThread() { return false; }
+  canAddComment() { return false; }
+  canResolveThread() { return false; }
+  canUnresolveThread() { return false; }
+  canAddReaction() { return false; }
+  canDeleteReaction() { return false; }
+}
+
+/** A small round avatar (initial on the member's color) as a data URL, for comment threads. */
+function avatarDataUrl(name: string, color: string) {
+  const ch = [...name.trim()][0]?.toUpperCase() ?? "?";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><circle cx="32" cy="32" r="32" fill="${color}"/><text x="32" y="42" font-family="sans-serif" font-size="28" font-weight="600" fill="#fff" text-anchor="middle">${ch.replace(/[<&"]/g, "")}</text></svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
 export type { BlockNoteEditor };
 export type { SelectionAttachment } from "@/lib/selection";
 
@@ -200,6 +220,23 @@ function EditorInner({
   const theme = useColorScheme();
   const coarse = useCoarsePointer();
   const fragment = doc.getXmlFragment("document-store");
+  const { members, role } = useWorkspace();
+
+  // Comments on selected text: threads live in the same Y.Doc (map "threads"), so they sync live
+  // and are saved with the page. Viewers can read threads but not write (they can't save the page).
+  const membersRef = useRef(members);
+  membersRef.current = members;
+  const comments = useMemo(() => {
+    const auth = role === "viewer" ? new ViewerThreadAuth(me.id) : new DefaultThreadStoreAuth(me.id, "editor");
+    return CommentsExtension({
+      threadStore: new YjsThreadStore(me.id, doc.getMap("threads"), auth),
+      resolveUsers: async (ids: string[]) => ids.map((id) => {
+        const p = membersRef.current.find((m) => m.user_id === id)?.profile;
+        const name = p?.display_name || p?.email || "알 수 없음";
+        return { id, username: name, avatarUrl: avatarDataUrl(name, p?.avatar_color ?? "#9ca3af") };
+      }),
+    });
+  }, [doc, me.id, role]);
 
   const editor = useCreateBlockNote(
     withCollaboration({
@@ -208,6 +245,7 @@ function EditorInner({
         placeholders: { ...ko.placeholders, emptyDocument: "'/'를 입력해 명령어 사용", default: "'/'를 입력해 명령어 사용" },
       },
       uploadFile: (file: File) => uploadFile(sb, workspaceId, file),
+      extensions: [comments],
       collaboration: {
         fragment,
         provider,
