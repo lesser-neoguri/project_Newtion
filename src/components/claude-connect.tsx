@@ -42,7 +42,7 @@ export function ClaudeConnect() {
   const [fresh, setFresh] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [client, setClient] = useState<"claude-code" | "claude-desktop" | "codex">("claude-code");
+  const [client, setClient] = useState<"claude-code" | "claude-cloud" | "claude-desktop" | "codex">("claude-code");
   const endpoint = typeof window !== "undefined" ? `${window.location.origin}/api/mcp` : "/api/mcp";
 
   const load = async () => {
@@ -102,13 +102,13 @@ export function ClaudeConnect() {
 
       <div className="space-y-3">
         <div className="flex gap-1 rounded-lg bg-hover p-0.5 text-sm">
-          {(["claude-code", "claude-desktop", "codex"] as const).map((k) => (
+          {(["claude-code", "claude-cloud", "claude-desktop", "codex"] as const).map((k) => (
             <button
               key={k}
               onClick={() => setClient(k)}
               className={`flex-1 rounded-md px-2 py-1 ${client === k ? "bg-background font-medium shadow-sm" : "text-muted"}`}
             >
-              {k === "claude-code" ? "Claude Code" : k === "claude-desktop" ? "Claude 데스크톱" : "Codex"}
+              {k === "claude-code" ? "Claude Code" : k === "claude-cloud" ? "Claude Code 클라우드" : k === "claude-desktop" ? "Claude 데스크톱" : "Codex"}
             </button>
           ))}
         </div>
@@ -118,6 +118,38 @@ export function ClaudeConnect() {
             label="터미널에서 한 번 실행"
             value={`claude mcp add --transport http newtion ${endpoint} --header "Authorization: Bearer ${tok}"`}
           />
+        )}
+
+        {client === "claude-cloud" && (
+          <>
+            <p className="text-sm">
+              claude.ai/code 클라우드 세션은 저장소의 <code className="rounded bg-hover px-1">.mcp.json</code>을 읽어요. 토큰은 저장소에 넣지 말고 클라우드 환경 설정에 넣으세요.
+            </p>
+            <CopyBlock
+              label="① 게임 저장소 루트에 .mcp.json 추가 후 커밋 (토큰 없음)"
+              value={JSON.stringify({ mcpServers: { newtion: { type: "http", url: endpoint, headers: { Authorization: "Bearer ${NEWTION_TOKEN}" } } } }, null, 2)}
+            />
+            <ol className="list-decimal space-y-1 pl-5 text-sm">
+              <li>
+                세션 제목줄의 클라우드 환경 메뉴 → <b>Edit</b> → 환경 변수에 <code className="rounded bg-hover px-1">NEWTION_TOKEN=</code>위 토큰 추가
+              </li>
+              <li>
+                같은 화면 <b>Network access</b>의 허용 도메인에 <code className="rounded bg-hover px-1">{new URL(endpoint).host}</code>와{" "}
+                <code className="rounded bg-hover px-1">{new URL(process.env.NEXT_PUBLIC_SUPABASE_URL!).host}</code>(게임 빌드 업로드용) 추가
+              </li>
+              <li>새 세션을 열면 newtion 도구가 잡혀요. 환경 변수는 그 환경을 쓰는 사람·명령이 볼 수 있으니 이 용도 전용 토큰을 쓰세요.</li>
+            </ol>
+            <CopyBlock
+              label="② (선택) 게임 저장소 CLAUDE.md에 넣어 두면 빌드·배포를 알아서 해요"
+              value={[
+                "## Newtion 웹 빌드 배포",
+                "- 웹 빌드: emcmake/emcc로 SDL2 빌드 → 결과물 폴더(build-web/: index.html, .js, .wasm, .data)",
+                "- 배포: newtion MCP의 list_games로 game_id 확인 → start_game_upload(game_id, version, notes, build_dir) →",
+                "  돌려준 bash 스크립트 실행 → publish_game_build(build_id). 버전 이름은 git 태그나 v0.N 규칙을 따른다.",
+                "- 기획서 확인/수정: read_page, edit_page (게임과 연결된 페이지는 list_games에 나옴)",
+              ].join("\n")}
+            />
+          </>
         )}
 
         {client === "claude-desktop" && (

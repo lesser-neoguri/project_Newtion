@@ -148,7 +148,9 @@ export function createNewtionMcp(token: string) {
       instructions:
         "Newtion은 게임 개발팀용 노션 스타일 협업 문서 서비스입니다. 문서를 고치기 전에 read_page로 현재 내용을 읽으세요. " +
         "본문은 Markdown으로 주고받습니다. 일부만 고칠 때는 edit_page(찾아 바꾸기)를, 전체를 다시 쓸 때만 update_page를 쓰세요. " +
-        "수정은 열려 있는 편집기에 실시간으로 반영되고, 바뀐 블록만 교체되어 다른 블록의 서식은 유지됩니다.",
+        "수정은 열려 있는 편집기에 실시간으로 반영되고, 바뀐 블록만 교체되어 다른 블록의 서식은 유지됩니다. " +
+        "웹 게임(SDL2·Emscripten 빌드)은 기획서 페이지 옆에서 실행됩니다. 새 빌드 배포: list_games → start_game_upload → " +
+        "돌려준 bash 스크립트 실행 → publish_game_build. 빌드 파일 내용을 도구 인자로 보내지 마세요.",
     },
   );
 
@@ -404,6 +406,114 @@ export function createNewtionMcp(token: string) {
   }, guard(async ({ page_id, text: body }: { page_id: string; text: string }) => {
     await rpc("mcp_add_comment", { p_page: page_id, p_body: body });
     return text("댓글을 달았습니다.");
+  }));
+
+  /* ---------------------------------------------------------------- */
+  /* Web game builds (SDL2 / Emscripten)                              */
+  /* ---------------------------------------------------------------- */
+
+  type GameRow = { id: string; name: string; workspace: string; latest_version: string | null; latest_build_id: string | null; builds: number; pages: { id: string; title: string }[] };
+  const playUrl = (buildId: string, entry = "index.html") => `${APP_URL}/g/${buildId}/${entry}`;
+
+  server.registerTool("list_games", {
+    title: "게임 목록",
+    description: "워크스페이스의 웹 게임(SDL2·Emscripten 빌드)과 최신 버전, 연결된 기획서 페이지를 봅니다.",
+    inputSchema: { workspace_id: z.string().uuid().optional() },
+  }, guard(async ({ workspace_id }: { workspace_id?: string }) => {
+    const games = await rpc<GameRow[]>("mcp_list_games", { p_workspace: workspace_id ?? null });
+    if (!games.length) return text("게임이 없습니다. create_game으로 만드세요.");
+    return text(games.map((g) =>
+      `- ${g.name} (game_id: ${g.id}) · ${g.workspace} · 최신 ${g.latest_version ?? "없음"} · 버전 ${g.builds}개` +
+      (g.pages.length ? `\n  기획서: ${g.pages.map((p) => `${p.title || "제목 없음"} (${p.id})`).join(", ")}` : "") +
+      (g.latest_build_id ? `\n  실행: ${playUrl(g.latest_build_id)}` : "")).join("\n"));
+  }));
+
+  server.registerTool("create_game", {
+    title: "게임 만들기",
+    description: "웹 게임을 만듭니다. page_id를 주면 그 기획서 페이지 옆에 게임이 붙어서 문서와 게임을 같이 볼 수 있습니다.",
+    inputSchema: {
+      workspace_id: z.string().uuid(),
+      name: z.string().min(1).max(80),
+      description: z.string().max(2000).optional(),
+      page_id: z.string().uuid().optional().describe("게임을 붙일 기획서 페이지"),
+    },
+  }, guard(async ({ workspace_id, name, description, page_id }: { workspace_id: string; name: string; description?: string; page_id?: string }) => {
+    const g = await rpc<{ id: string; name: string }>("mcp_create_game", { p_workspace: workspace_id, p_name: name, p_description: description ?? null, p_page: page_id ?? null });
+    return text(`게임을 만들었습니다: ${g.name} (game_id: ${g.id})${page_id ? ` · 페이지에 연결됨 ${APP_URL}/w/${workspace_id}/p/${page_id}` : ""}\n다음: start_game_upload로 첫 버전을 올리세요.`);
+  }));
+
+  server.registerTool("link_game", {
+    title: "페이지에 게임 연결",
+    description: "기획서 페이지 옆에 보여줄 게임을 바꿉니다. game_id를 빼면 연결을 끊습니다.",
+    inputSchema: { page_id: z.string().uuid(), game_id: z.string().uuid().optional() },
+  }, guard(async ({ page_id, game_id }: { page_id: string; game_id?: string }) => {
+    await rpc("mcp_link_game", { p_page: page_id, p_game: game_id ?? null });
+    return text(game_id ? "페이지에 게임을 연결했습니다." : "연결을 끊었습니다.");
+  }));
+
+  server.registerTool("list_game_builds", {
+    title: "게임 버전 목록",
+    description: "게임에 올라간 버전(빌드)들을 최신순으로 봅니다.",
+    inputSchema: { game_id: z.string().uuid() },
+  }, guard(async ({ game_id }: { game_id: string }) => {
+    type B = { id: string; version: string; notes: string | null; status: string; entry: string; files: number; total_size: number; created_at: string; by: string; latest: boolean };
+    const bs = await rpc<B[]>("mcp_list_game_builds", { p_game: game_id });
+    if (!bs.length) return text("아직 버전이 없습니다.");
+    return text(bs.map((b) =>
+      `- ${b.version}${b.latest ? " [최신]" : ""}${b.status !== "ready" ? " (업로드 중·미게시)" : ""} · ${b.by} · ${new Date(b.created_at).toLocaleString("ko-KR", { timeZone: "Asia/Seoul" })}` +
+      ` · 파일 ${b.files}개 ${(b.total_size / 1048576).toFixed(1)}MB (build_id: ${b.id})` +
+      (b.notes ? `\n  ${b.notes}` : "") + (b.status === "ready" ? `\n  실행: ${playUrl(b.id, b.entry)}` : "")).join("\n"));
+  }));
+
+  server.registerTool("start_game_upload", {
+    title: "게임 새 버전 업로드 시작",
+    description:
+      "웹 게임의 새 버전(Emscripten 빌드 결과물 폴더: .html, .js, .wasm, .data, 에셋)을 올립니다. " +
+      "1) 이 도구로 버전을 만들면 업로드용 bash 스크립트가 나옵니다. 2) 셸에서 그 스크립트를 그대로 실행해 파일을 올립니다(2시간 안에). " +
+      "3) publish_game_build로 게시하면 최신 버전이 되고 기획서 옆 뷰어에 바로 뜹니다. 파일 내용을 도구 인자로 보내지 마세요.",
+    inputSchema: {
+      game_id: z.string().uuid(),
+      version: z.string().min(1).max(60).describe("예: v0.3, 2026-11-26-boss"),
+      notes: z.string().max(2000).optional().describe("이번 버전 변경 사항"),
+      build_dir: z.string().max(500).optional().describe("올릴 빌드 폴더 경로 (스크립트에 그대로 들어감, 기본값 ./build)"),
+      entry: z.string().max(200).optional().describe("시작 HTML (기본 index.html)"),
+    },
+  }, guard(async ({ game_id, version, notes, build_dir, entry }: { game_id: string; version: string; notes?: string; build_dir?: string; entry?: string }) => {
+    const b = await rpc<{ build_id: string }>("mcp_start_game_build", { p_game: game_id, p_version: version, p_notes: notes ?? null, p_entry: entry ?? null });
+    const base = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/games/${b.build_id}`;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
+    const dir = (build_dir ?? "./build").replace(/'/g, "'\\''");
+    const script = [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      `cd '${dir}'`,
+      `U='${base}'`,
+      `K='${key}'  # 공개(publishable) 키. 업로드 권한은 이 build_id가 2시간 동안만 가짐`,
+      "find . -type f ! -name '.DS_Store' ! -path '*/.git/*' | sed 's|^\\./||' | while IFS= read -r f; do",
+      "  case \"$f\" in",
+      "    *.html|*.htm) t=text/html;; *.js|*.mjs) t=text/javascript;; *.wasm) t=application/wasm;;",
+      "    *.json|*.map) t=application/json;; *.css) t=text/css;; *.png) t=image/png;; *.jpg|*.jpeg) t=image/jpeg;;",
+      "    *.ogg) t=audio/ogg;; *.mp3) t=audio/mpeg;; *.wav) t=audio/wav;; *.ttf) t=font/ttf;; *) t=application/octet-stream;;",
+      "  esac",
+      "  enc=$(printf '%s' \"$f\" | sed 's/%/%25/g; s/ /%20/g; s/#/%23/g; s/?/%3F/g')",
+      "  curl -sS --fail-with-body -X POST \"$U/$enc\" -H \"apikey: $K\" -H \"Authorization: Bearer $K\" \\",
+      "    -H \"Content-Type: $t\" -H 'Cache-Control: max-age=31536000' --data-binary \"@$f\" > /dev/null",
+      "  echo \"uploaded $f\"",
+      "done",
+    ].join("\n");
+    return text(
+      `버전을 만들었습니다: ${version} (build_id: ${b.build_id})\n\n` +
+      `아래 스크립트를 셸에서 실행해 빌드 파일을 올리세요 (네트워크에서 ${new URL(base).host} 접근이 필요합니다):\n\n\`\`\`bash\n${script}\n\`\`\`\n\n` +
+      `다 올라가면 publish_game_build(build_id: "${b.build_id}")를 호출하세요.`);
+  }));
+
+  server.registerTool("publish_game_build", {
+    title: "게임 버전 게시",
+    description: "start_game_upload로 올린 파일을 확인하고 게시합니다. 게시하면 이 버전이 최신이 되어 기획서 옆 뷰어에 바로 뜹니다.",
+    inputSchema: { build_id: z.string().uuid(), entry: z.string().max(200).optional().describe("시작 HTML이 index.html이 아니면 지정") },
+  }, guard(async ({ build_id, entry }: { build_id: string; entry?: string }) => {
+    const r = await rpc<{ version: string; entry: string; files: number; total_size: number }>("mcp_publish_game_build", { p_build: build_id, p_entry: entry ?? null });
+    return text(`게시했습니다: ${r.version} · 파일 ${r.files}개 ${(r.total_size / 1048576).toFixed(1)}MB\n실행: ${playUrl(build_id, r.entry)}`);
   }));
 
   return server;

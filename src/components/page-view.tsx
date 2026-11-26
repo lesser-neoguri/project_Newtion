@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  ChevronRight, FileText, History, ImageIcon, Link2, MessageSquare, MoreHorizontal, Plus, Smile, Star, Table2, Trash2,
+  ChevronRight, FileText, Gamepad2, History, ImageIcon, Link2, MessageSquare, MoreHorizontal, Plus, Smile, Star, Table2, Trash2,
   RotateCcw, LayoutTemplate,
 } from "lucide-react";
 import { useWorkspace } from "./workspace-context";
@@ -18,6 +18,7 @@ import { VersionPreview, useSnapshot, type PageVersion } from "./versions";
 import { VersionMap, type Commit } from "./version-map";
 import { BranchBanner, useBranching } from "./branching";
 import { TocButton, TocDock, TocRail, useToc } from "./toc";
+import { GameLinkDialog, GamePanel } from "./game-panel";
 import type { BlockNoteEditor } from "./editor";
 import { aiHub } from "@/lib/ai-hub";
 import { selectionToAttachment } from "@/lib/selection";
@@ -44,6 +45,9 @@ export function PageView({ pageId }: { pageId: string }) {
   const [previewVersion, setPreviewVersion] = useState<PageVersion | null>(null);
   const [versionsReload, setVersionsReload] = useState(0);
   const [mapKey, setMapKey] = useState<string | null>(null);
+  const [showGame, setShowGame] = useState(true);
+  const [linkingGame, setLinkingGame] = useState(false);
+  const isDesktop = useIsDesktop();
   const branchParam = useSearchParams().get("branch");
   const edKey = branchParam ?? "main";
   const editor = edState.key === edKey ? edState.ed : null;
@@ -113,7 +117,7 @@ export function PageView({ pageId }: { pageId: string }) {
           ...prev,
           title: n.updated_by === me.id ? prev.title : n.title,
           icon: n.icon, cover: n.cover, db_schema: n.db_schema, properties: n.properties,
-          archived_at: n.archived_at, parent_id: n.parent_id, updated_at: n.updated_at, updated_by: n.updated_by,
+          archived_at: n.archived_at, parent_id: n.parent_id, updated_at: n.updated_at, updated_by: n.updated_by, game_id: n.game_id,
         }));
       })
       .subscribe();
@@ -236,6 +240,11 @@ export function PageView({ pageId }: { pageId: string }) {
             ))}
           </div>
           {page.kind !== "database" && !tidy.reviewing && !previewVersion && <TocButton items={toc} scroller={scroller} />}
+          {page.game_id && (
+            <button title="게임" onClick={() => setShowGame((v) => !v)} className={`rounded p-1.5 hover:bg-hover ${showGame ? "bg-hover" : ""}`}>
+              <Gamepad2 size={16} />
+            </button>
+          )}
           <button title="댓글" onClick={() => setShowComments((v) => !v)} className={`rounded p-1.5 hover:bg-hover ${showComments ? "bg-hover" : ""}`}>
             <MessageSquare size={16} />
           </button>
@@ -251,6 +260,11 @@ export function PageView({ pageId }: { pageId: string }) {
               {page.kind !== "database" && (
                 <MenuItem onClick={() => { setMenu(false); setShowComments(false); setShowVersions(true); }}>
                   <History size={14} /> 버전 맵
+                </MenuItem>
+              )}
+              {editable && !inBranch && page.kind !== "database" && !page.game_id && (
+                <MenuItem onClick={() => { setMenu(false); setLinkingGame(true); }}>
+                  <Gamepad2 size={14} /> 게임 붙이기 (웹 빌드)
                 </MenuItem>
               )}
               {canEdit && page.kind === "doc" && (
@@ -291,6 +305,9 @@ export function PageView({ pageId }: { pageId: string }) {
           </div>
         )}
 
+        {page.game_id && showGame && !isDesktop && (
+          <GamePanel gameId={page.game_id} canEdit={mainEditable} variant="top" onClose={() => setShowGame(false)} onUnlink={() => void patch({ game_id: null })} />
+        )}
         <div ref={setScroller} className="scrollbar-thin flex-1 overflow-y-auto">
           {page.kind !== "database" && !tidy.reviewing && !previewVersion && <TocRail items={toc} scroller={scroller} />}
           {page.kind !== "database" && !tidy.reviewing && !previewVersion && !showVersions && <TocDock items={toc} scroller={scroller} />}
@@ -402,6 +419,16 @@ export function PageView({ pageId }: { pageId: string }) {
         </div>
         {editable && page.kind !== "database" && <TidyBar tidy={tidy} />}
       </div>
+      {page.game_id && showGame && isDesktop && !showComments && !showVersions && (
+        <GamePanel gameId={page.game_id} canEdit={mainEditable} variant="side" onClose={() => setShowGame(false)} onUnlink={() => void patch({ game_id: null })} />
+      )}
+      {linkingGame && (
+        <GameLinkDialog
+          pageTitle={page.title}
+          onClose={() => setLinkingGame(false)}
+          onLink={async (gameId) => { await patch({ game_id: gameId }); setShowGame(true); setLinkingGame(false); }}
+        />
+      )}
       {showComments && <CommentsPanel pageId={pageId} onClose={() => setShowComments(false)} />}
       {showVersions && !showComments && (
         <VersionMap
@@ -432,6 +459,17 @@ export function PageView({ pageId }: { pageId: string }) {
       )}
     </div>
   );
+}
+
+function useIsDesktop() {
+  const [desk, setDesk] = useState(() => typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px)");
+    const on = () => setDesk(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return desk;
 }
 
 function TitleArea({ value, editable, onChange }: { value: string; editable: boolean; onChange: (v: string) => void }) {

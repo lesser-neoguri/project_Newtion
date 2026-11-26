@@ -42,6 +42,33 @@ export interface Page extends PageMeta {
   created_by: string | null;
   updated_by: string | null;
   created_at: string;
+  game_id: string | null;
+}
+
+// ---- Web games ----
+export interface Game {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description: string | null;
+  latest_build_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GameBuild {
+  id: string;
+  game_id: string;
+  version: string;
+  notes: string | null;
+  entry: string;
+  files: { path: string; size: number; type: string | null }[];
+  total_size: number;
+  status: "uploading" | "ready";
+  uploaded_by: string | null;
+  actor: "user" | "ai";
+  actor_name: string | null;
+  created_at: string;
 }
 
 export const PAGE_META_COLUMNS =

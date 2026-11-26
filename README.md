@@ -87,6 +87,16 @@ npm run dev
 
 ---
 
+## 🕹️ 웹 게임 뷰어 (SDL2 · Emscripten)
+
+기획서 페이지에 게임을 붙이면(`⋯ → 게임 붙이기`) 문서 옆(폰에서는 위)에서 웹 빌드를 바로 실행합니다.
+
+- **버전**: 빌드를 올릴 때마다 버전이 쌓이고, 상단 드롭다운에서 예전 버전도 실행해 볼 수 있습니다. 최신 버전은 열려 있는 모든 탭에 바로 반영됩니다.
+- **올리기**: Emscripten 결과물 폴더(`index.html`, `.js`, `.wasm`, `.data`, 에셋)를 끌어다 놓거나 폴더/.zip 선택. 파일은 Supabase Storage `games/<build_id>/…`에 저장됩니다.
+- **AI 배포**: Claude Code(클라우드 포함)·Codex가 MCP로 `start_game_upload` → 스크립트 실행 → `publish_game_build`. 클라우드 세션 설정은 설정 → AI 연결 → “Claude Code 클라우드” 탭.
+- **격리**: 게임은 `/g/<build_id>/…`에서 `Content-Security-Policy: sandbox`(+ iframe sandbox)로 열려 opaque origin에서 돕니다. 업로드된 코드는 Newtion 로그인 정보·저장소에 접근할 수 없고, 대신 게임 안 `localStorage`/IndexedDB 저장도 막힙니다. 큰 파일(.wasm/.data)은 스토리지로 바로 리다이렉트됩니다.
+- **제약**: pthreads(SharedArrayBuffer)가 필요한 빌드는 cross-origin isolation이 필요해 지원하지 않습니다(SDL2 기본 단일 스레드 빌드는 OK). 파일 하나 크기는 Supabase 플랜의 업로드 한도(무료 50MB)를 따릅니다. 빌드 URL을 아는 사람은 누구나 실행할 수 있습니다(추측 불가능한 UUID).
+
 ## 🤖 Claude·Codex에서 Newtion 문서 고치기 (MCP)
 
 Claude Code, Claude 데스크톱, OpenAI Codex(CLI·IDE 확장)가 내 권한으로 Newtion 문서를 읽고 고칠 수 있습니다.
@@ -115,6 +125,8 @@ Claude Code, Claude 데스크톱, OpenAI Codex(CLI·IDE 확장)가 내 권한으
 | `query_database`, `add_database_row`, `update_database_row` | 데이터베이스 보기·항목 추가·수정 (속성은 이름으로) |
 | `list_versions`, `read_version`, `restore_version` | 버전 기록 보기·버전 내용 읽기·복원 (복원 전 상태도 버전으로 남음) |
 | `add_comment` | 댓글 달기 |
+| `list_games`, `create_game`, `link_game` | 웹 게임 목록·만들기·기획서 페이지에 연결 |
+| `start_game_upload`, `publish_game_build`, `list_game_builds` | 새 버전 업로드(업로드용 bash 스크립트 발급) → 게시 → 버전 목록 |
 
 - Claude의 수정은 공동 편집자처럼 실시간 채널로 들어가, 열려 있는 탭에 바로 나타나고 바뀐 블록만 교체됩니다.
 - 권한은 토큰 주인의 역할을 그대로 따릅니다 (뷰어는 읽기·댓글만). 권한 검사는 DB 함수(`mcp_*`) 안에서 하므로 서버에 관리자 키가 필요 없습니다.
