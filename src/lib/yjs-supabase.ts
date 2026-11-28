@@ -33,6 +33,8 @@ export class SupabaseYProvider {
     private sb: SupabaseClient,
     private room: string,
     readonly doc: Y.Doc,
+    /** Your own user id: your other tabs/devices are not drawn (no cursor, no selection). */
+    private ignoreUserId?: string,
   ) {
     this.awareness = new Awareness(doc);
     this.channel = sb.channel(`ydoc:${room}`, {
@@ -66,6 +68,7 @@ export class SupabaseYProvider {
       })
       .on("broadcast", { event: "awareness" }, ({ payload }) => {
         applyAwarenessUpdate(this.awareness, fromB64(payload.u), this);
+        this.dropOwnSessions();
       })
       .on("presence", { event: "leave" }, ({ key }) => {
         const id = Number(key);
@@ -131,6 +134,15 @@ export class SupabaseYProvider {
     const changed = added.concat(updated, removed);
     this.send("awareness", { u: toB64(encodeAwarenessUpdate(this.awareness, changed)) });
   };
+
+  private dropOwnSessions() {
+    if (!this.ignoreUserId) return;
+    const mine: number[] = [];
+    this.awareness.getStates().forEach((state, id) => {
+      if (id !== this.doc.clientID && (state as { user?: { id?: string } }).user?.id === this.ignoreUserId) mine.push(id);
+    });
+    if (mine.length) removeAwarenessStates(this.awareness, mine, this);
+  }
 
   private onUnload = () => {
     removeAwarenessStates(this.awareness, [this.doc.clientID], "unload");

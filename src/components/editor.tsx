@@ -4,6 +4,7 @@ import "@blocknote/core/fonts/inter.css";
 import "@blocknote/mantine/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Y from "yjs";
+import { useRouter } from "next/navigation";
 import {
   FormattingToolbar,
   FormattingToolbarController,
@@ -168,32 +169,6 @@ function TextToolbar({ children }: { children: React.ReactNode }) {
 }
 const OWN_BLOCKS = new Set(["cards", "timeline", "pixelCode", "spriteSheet", "pixelArt", "curve", "dropTable", "recipe"]);
 
-function hiddenCursor() {
-  const s = document.createElement("span");
-  s.style.display = "none";
-  return s;
-}
-
-/** Same markup as BlockNote's default collaboration cursor. */
-function cursorEl(user: { name: string; color: string }) {
-  const hex = user.color.replace("#", "");
-  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.length === 3 ? hex[i / 2] + hex[i / 2] : hex.slice(i, i + 2), 16) || 0);
-  const text = 0.299 * r + 0.587 * g + 0.114 * b < 150 ? "white" : "black";
-  const base = document.createElement("span");
-  base.classList.add("bn-collaboration-cursor__base");
-  const caret = document.createElement("span");
-  caret.setAttribute("contenteditable", "false");
-  caret.classList.add("bn-collaboration-cursor__caret");
-  caret.setAttribute("style", `background-color: ${user.color}; color: ${text}`);
-  const label = document.createElement("span");
-  label.classList.add("bn-collaboration-cursor__label");
-  label.setAttribute("style", `background-color: ${user.color}; color: ${text}`);
-  label.textContent = user.name;
-  caret.appendChild(label);
-  base.append("\u2060", caret, "\u2060");
-  return base;
-}
-
 export type { BlockNoteEditor };
 export type { SelectionAttachment } from "@/lib/selection";
 
@@ -211,7 +186,7 @@ export default function CollaborativeEditor(props: Props) {
       }
     }
     const room = props.branchId ? `branch:${props.branchId}` : props.pageId;
-    const provider = new SupabaseYProvider(props.sb, room, doc);
+    const provider = new SupabaseYProvider(props.sb, room, doc, props.me.id);
     setSession({ doc, provider });
     return () => {
       provider.destroy();
@@ -288,8 +263,6 @@ function EditorInner({
         fragment,
         provider,
         user: { id: me.id, name: me.display_name || me.email, color: me.avatar_color },
-        // Your own other tabs/devices are not "someone else": don't draw their cursors.
-        renderCursor: (user: { id?: string; name: string; color: string }) => (user.id === me.id ? hiddenCursor() : cursorEl(user)),
         showCursorLabels: "activity",
       },
     }),
@@ -395,6 +368,38 @@ function EditorInner({
       window.visualViewport?.removeEventListener("resize", onResize);
     };
   }, [coarse, editor]);
+
+  // Links: a tap/click on a link to another Newtion page opens that page (phones would otherwise just
+  // put the caret in the link). On phones, outside links open in a new tab. Selecting text still works.
+  const router = useRouter();
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      const root = editor.domElement;
+      if (!root) return;
+      if (e.button !== 0 || e.shiftKey || e.altKey) return;
+      const a = (e.target as HTMLElement | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!a || !root.contains(a)) return;
+      const sel = window.getSelection();
+      if (sel && !sel.isCollapsed) return; // the user is selecting text
+      let url: URL;
+      try { url = new URL(a.getAttribute("href") ?? "", window.location.href); } catch { return; }
+      const internal = url.origin === window.location.origin || /(^|\.)project-newtion\.vercel\.app$/.test(url.hostname);
+      if (internal && url.pathname.startsWith("/w/")) {
+        e.preventDefault();
+        e.stopPropagation();
+        (document.activeElement as HTMLElement | null)?.blur?.(); // close the phone keyboard
+        if (e.metaKey || e.ctrlKey) window.open(url.pathname + url.search + url.hash, "_blank");
+        else router.push(url.pathname + url.search + url.hash);
+      } else if (coarse && /^https?:$/.test(url.protocol)) {
+        e.preventDefault();
+        e.stopPropagation();
+        (document.activeElement as HTMLElement | null)?.blur?.();
+        window.open(url.href, "_blank", "noopener");
+      }
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, [editor, router, coarse]);
 
   const toolbar = useCallback(
     () => (
