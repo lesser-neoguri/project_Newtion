@@ -5,7 +5,32 @@ import { Download, ListPlus, Plus, Trash2, Upload, X } from "lucide-react";
 import { Btn, Field, Shell, uid, useBlockData, type AnyBlock, type AnyEditor } from "./common";
 import { download, framesToGif, loadImage, sheetFrames, sheetToGif } from "@/lib/gif";
 
-interface Sprite { id: string; name: string; tag: string; desc: string; note: string; gif: string; w?: number; h?: number }
+interface Stat { k: string; v: string }
+interface Sprite {
+  id: string; name: string; tag: string; desc: string; note: string; gif: string; w?: number; h?: number;
+  tier?: string; stats?: Stat[]; lore?: string; tip?: string;
+}
+
+const TIERS: Record<string, string> = { 시작: "#9ca3af", 초반: "#22c55e", 중반: "#3b82f6", 후반: "#a855f7", 유물: "#f59e0b" };
+
+/** Pixel art shown at a whole-number scale (crisp), as large as fits — same density for every sprite. */
+function Sprite({ s, maxW, maxH, onClick }: { s: Sprite; maxW: number; maxH: number; onClick: () => void }) {
+  const k = s.w && s.h ? Math.max(1, Math.min(3, Math.floor(Math.min(maxW / s.w, maxH / s.h)))) : 0;
+  return (
+    <button type="button" className="nb-stage-btn" onClick={onClick} title="크게 보기">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={s.gif} alt={s.name} loading="lazy"
+        style={k ? { width: s.w! * k, height: s.h! * k, maxWidth: "100%", maxHeight: "100%" } : { maxWidth: "100%", maxHeight: "100%" }} />
+      <span className="nb-shadow" style={{ width: k ? Math.min(s.w! * k * 0.8, maxW) : "60%" }} />
+    </button>
+  );
+}
+
+const statsText = (st?: Stat[]) => (st ?? []).map((x) => `${x.k}: ${x.v}`).join("\n");
+const parseStats = (t: string): Stat[] => t.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
+  const i = l.indexOf(":");
+  return i > 0 ? { k: l.slice(0, i).trim(), v: l.slice(i + 1).trim() } : { k: l, v: "" };
+});
 interface GalleryData { layout: "list" | "grid"; size: number; bg: "checker" | "dark" | "light"; items: Sprite[] }
 export const GALLERY_DEFAULT: GalleryData = { layout: "list", size: 112, bg: "dark", items: [] };
 
@@ -111,12 +136,9 @@ export function SpriteGalleryView({ block, editor }: { block: AnyBlock; editor: 
         <div className="nb-slist">
           {shown.map((s) => (
             <div key={s.id} className="nb-srow">
-              <div className={`nb-gimg nb-srow-img ${bg}`} style={{ width: d.size, height: d.size }}>
+              <div className={`nb-hangar nb-srow-img ${d.bg === "dark" ? "" : bg}`} style={{ width: Math.max(d.size, 120) * 1.7, height: Math.max(d.size, 120) * 1.35 }}>
                 {s.gif ? (
-                  <button type="button" className="h-full w-full" onClick={() => setZoom(s)} title="크게 보기">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={s.gif} alt={s.name} loading="lazy" />
-                  </button>
+                  <Sprite s={s} maxW={Math.max(d.size, 120) * 1.7 - 16} maxH={Math.max(d.size, 120) * 1.35 - 26} onClick={() => setZoom(s)} />
                 ) : editable ? (
                   <button type="button" className="nb-gempty" onClick={() => setUploadFor(s)}><Upload size={16} />올리기</button>
                 ) : (
@@ -131,8 +153,15 @@ export function SpriteGalleryView({ block, editor }: { block: AnyBlock; editor: 
                   <div className="space-y-0.5">
                     <Field value={s.name} placeholder="모듈 이름" className="font-semibold" onCommit={(v) => upd(s.id, { name: v })} />
                     <Field value={s.desc} placeholder="설명" multiline className="text-sm" onCommit={(v) => upd(s.id, { desc: v })} />
-                    <Field value={s.note} placeholder="세부 (크기·무게·비고)" className="text-xs" onCommit={(v) => upd(s.id, { note: v })} />
+                    <Field value={s.note} placeholder="메모" className="text-xs" onCommit={(v) => upd(s.id, { note: v })} />
+                    <Field value={statsText(s.stats)} placeholder={"성능 (한 줄에 하나)\n크기: 4×3칸\n무게: 28t"} multiline className="font-mono text-xs" onCommit={(v) => upd(s.id, { stats: parseStats(v) })} />
+                    <Field value={s.lore ?? ""} placeholder="배경 설정" multiline className="text-xs" onCommit={(v) => upd(s.id, { lore: v })} />
+                    <Field value={s.tip ?? ""} placeholder="운영 팁" className="text-xs" onCommit={(v) => upd(s.id, { tip: v })} />
                     <div className="flex items-center gap-1">
+                      <select className="nb-field w-auto text-xs" value={s.tier ?? ""} onChange={(e) => upd(s.id, { tier: e.target.value || undefined })}>
+                        <option value="">등급 없음</option>
+                        {Object.keys(TIERS).map((t) => <option key={t} value={t}>{t}</option>)}
+                      </select>
                       <Field value={s.tag} placeholder="분류" className="w-32 text-xs" onCommit={(v) => upd(s.id, { tag: v })} />
                       {s.gif && <Btn title="GIF 지우기" onClick={() => upd(s.id, { gif: "", w: undefined, h: undefined })}><X size={12} /></Btn>}
                       <Btn title="항목 삭제" onClick={() => set((x) => ({ ...x, items: x.items.filter((i) => i.id !== s.id) }))}><Trash2 size={12} /></Btn>
@@ -140,9 +169,21 @@ export function SpriteGalleryView({ block, editor }: { block: AnyBlock; editor: 
                   </div>
                 ) : (
                   <>
-                    <div className="font-semibold">{s.name || "이름 없음"}</div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[15px] font-semibold">{s.name || "이름 없음"}</span>
+                      {s.tier && <span className="nb-tier" style={{ color: TIERS[s.tier] ?? "inherit", borderColor: TIERS[s.tier] ?? "currentColor" }}>{s.tier}</span>}
+                    </div>
                     {s.desc && <p className="mt-0.5 whitespace-pre-wrap text-sm">{s.desc}</p>}
-                    {s.note && <p className="mt-1 text-xs text-muted">{s.note}</p>}
+                    {!!s.stats?.length && (
+                      <dl className="nb-stats">
+                        {s.stats.map((x, i) => (
+                          <div key={i} className={x.v.length > 22 ? "nb-stat-wide" : ""}><dt>{x.k}</dt><dd>{x.v}</dd></div>
+                        ))}
+                      </dl>
+                    )}
+                    {s.lore && <p className="nb-lore">{s.lore}</p>}
+                    {s.tip && <p className="mt-1.5 text-xs text-muted">💡 {s.tip}</p>}
+                    {s.note && !s.stats?.length && <p className="mt-1 text-xs text-muted">{s.note}</p>}
                   </>
                 )}
               </div>
@@ -157,12 +198,9 @@ export function SpriteGalleryView({ block, editor }: { block: AnyBlock; editor: 
       {d.layout === "grid" && <div className="nb-gallery" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${d.size}px, 1fr))` }}>
         {shown.map((s) => (
           <div key={s.id} className="nb-gcard">
-            <div className={`nb-gimg ${bg}`} style={{ height: Math.max(100, d.size) * 0.8 }}>
+            <div className={`nb-hangar ${d.bg === "dark" ? "" : bg}`} style={{ height: Math.max(100, d.size) * 0.8 }}>
               {s.gif ? (
-                <button type="button" className="h-full w-full" onClick={() => setZoom(s)} title="크게 보기">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={s.gif} alt={s.name} loading="lazy" />
-                </button>
+                <Sprite s={s} maxW={Math.max(100, d.size) - 12} maxH={Math.max(100, d.size) * 0.8 - 18} onClick={() => setZoom(s)} />
               ) : editable ? (
                 <button type="button" className="nb-gempty" onClick={() => setUploadFor(s)}><Upload size={16} />스프라이트 올리기</button>
               ) : (
@@ -216,10 +254,11 @@ export function SpriteGalleryView({ block, editor }: { block: AnyBlock; editor: 
       {zoom && (
         <div className="fixed inset-0 z-[98] flex flex-col items-center justify-center gap-3 bg-black/85 p-4" onClick={() => setZoom(null)}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={zoom.gif} alt={zoom.name} className="max-h-[70vh] max-w-full object-contain" style={{ imageRendering: "pixelated", width: zoom.w ? Math.min(zoom.w * 4, 640) : undefined }} />
-          <div className="text-center text-white">
-            <div className="font-semibold">{zoom.name}</div>
-            <div className="text-xs text-white/60">{[zoom.tag, zoom.note, zoom.w && `${zoom.w}×${zoom.h}px`].filter(Boolean).join(" · ")}</div>
+          <img src={zoom.gif} alt={zoom.name} className="max-h-[70vh] max-w-full object-contain" style={{ imageRendering: "pixelated", width: zoom.w ? zoom.w * Math.max(1, Math.min(6, Math.floor(560 / zoom.w), Math.floor(420 / (zoom.h ?? zoom.w)))) : undefined }} />
+          <div className="max-w-lg text-center text-white">
+            <div className="font-semibold">{zoom.name}{zoom.tier ? ` · ${zoom.tier}` : ""}</div>
+            <div className="text-xs text-white/60">{[zoom.tag, zoom.desc].filter(Boolean).join(" · ")}</div>
+            {zoom.lore && <p className="mt-2 text-xs leading-relaxed text-white/75">{zoom.lore}</p>}
           </div>
           <a href={zoom.gif} download={`${zoom.name || "sprite"}.gif`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1 rounded-md bg-white/15 px-3 py-1.5 text-sm text-white hover:bg-white/25">
             <Download size={14} /> GIF 받기

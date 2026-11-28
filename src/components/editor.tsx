@@ -289,17 +289,34 @@ function EditorInner({
   // Persist: debounce local changes into pages.ydoc + pages.content
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dirty = useRef(false);
+  const lastSaved = useRef<string | null>(null);
   useEffect(() => {
     if (!editable) return;
 
+    const table = branchId ? "page_branches" : "pages";
+    const rowId = branchId ?? pageId;
     const save = async () => {
       if (!dirty.current) return;
       dirty.current = false;
       onSaveState?.("saving");
-      const { error } = await sb
-        .from(branchId ? "page_branches" : "pages")
+      // Never overwrite edits saved by someone else (another tab, an AI tool) that this tab missed live:
+      // if the stored state changed since our last save, merge it in first. Yjs merges never lose edits.
+      try {
+        const { data: meta } = await sb.from(table).select("updated_at").eq("id", rowId).single();
+        if (meta && meta.updated_at !== lastSaved.current) {
+          const { data: row } = await sb.from(table).select("ydoc").eq("id", rowId).single();
+          if (row?.ydoc) Y.applyUpdate(doc, fromB64(row.ydoc), provider); // origin = provider: not re-sent, not re-marked dirty
+        }
+      } catch (e) {
+        console.warn("merge before save failed", e);
+      }
+      const { data: saved, error } = await sb
+        .from(table)
         .update({ ydoc: toB64(Y.encodeStateAsUpdate(doc)), content: editor.document })
-        .eq("id", branchId ?? pageId);
+        .eq("id", rowId)
+        .select("updated_at")
+        .single();
+      if (saved) lastSaved.current = saved.updated_at;
       onSaveState?.(error ? "error" : "saved");
       if (error) dirty.current = true;
     };

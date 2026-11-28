@@ -6,6 +6,7 @@ import {
   applyBlocks, blocksOf, blocksToMarkdown, docFromStored, encodeDoc, markdownToBlocks, withLiveDoc, type AnyBlock,
 } from "./docs";
 import * as Y from "yjs";
+import { fromB64 } from "@/lib/yjs-supabase";
 import { BLOCK_HELP } from "@/lib/blocks/shared";
 
 interface PageData {
@@ -74,11 +75,18 @@ export function createNewtionMcp(token: string) {
    *  The state right before the edit is kept as a version (source / label). */
   /** Writes new blocks into a page through the live collaboration channel, saves,
    *  and records the result as an AI commit on the version map (one node per edit). */
+  /** Merge whatever was saved meanwhile (e.g. by an open tab) so the save below can't drop it. */
+  async function mergeStored(pageId: string, doc: Y.Doc) {
+    const fresh = await getPage(pageId);
+    if (fresh.ydoc) Y.applyUpdate(doc, fromB64(fresh.ydoc));
+  }
+
   async function writeBody(p: PageData, blocks: AnyBlock[], message: string, source: "mcp" | "restore" = "mcp") {
     if (p.role === "viewer") throw new ToolError("no permission");
     if (p.kind === "database") throw new ToolError("데이터베이스 페이지에는 본문이 없습니다. 항목은 add_database_row로 추가하세요.");
     const doc = docFromStored(p.ydoc, p.content);
     const stats = await withLiveDoc(p.id, doc, (d) => applyBlocks(d, blocks));
+    await mergeStored(p.id, doc);
     const after = blocksOf(doc);
     await rpc("mcp_save_page", { p_page: p.id, p_content: after, p_ydoc: encodeDoc(doc) });
     if (stats.changed) {
@@ -92,6 +100,7 @@ export function createNewtionMcp(token: string) {
     if (p.role === "viewer") throw new ToolError("no permission");
     const doc = docFromStored(p.ydoc, p.content);
     const stats = await withLiveDoc(p.id, doc, async (d) => applyBlocks(d, await transform(blocksOf(d))));
+    await mergeStored(p.id, doc);
     const after = blocksOf(doc);
     await rpc("mcp_save_page", { p_page: p.id, p_content: after, p_ydoc: encodeDoc(doc) });
     if (stats.changed) {

@@ -44,7 +44,7 @@ export const BLOCK_HELP: Record<CustomBlockType, string> = {
   pixelArt: '픽셀 아트/타일 배치도. {"w":16,"h":16,"cell":16,"palette":[{"c":"#hex","name":"이름"}],"px":"행 우선 문자열: . = 빈칸, 0-9a-z = 팔레트 번호"}',
   curve: '밸런스 곡선. {"from":1,"to":50,"step":1,"xLabel":"레벨","series":[{"name":"","expr":"10*1.15^x","color":"#hex"}]}',
   dropTable: '드롭 테이블. {"rolls":1,"rows":[{"name":"","weight":10,"min":1,"max":1,"rarity":"common|uncommon|rare|epic|legendary"}]}',
-  spriteGallery: '스프라이트 도감(모듈별 GIF). {"layout":"list|grid","size":112,"bg":"dark|checker|light","items":[{"name":"","tag":"분류","desc":"설명","note":"세부","gif":"GIF url"}]}',
+  spriteGallery: '스프라이트 도감(모듈별 GIF). {"layout":"list|grid","size":112,"bg":"dark|checker|light","items":[{"name":"","tag":"분류","tier":"시작|초반|중반|후반|유물","desc":"한 줄 설명","stats":[{"k":"무게","v":"28t"}],"lore":"배경 설정","tip":"운영 팁","note":"","gif":"GIF url","w":0,"h":0}]}',
   recipe: '제작 레시피. {"recipes":[{"station":"","inputs":[{"name":"","qty":1}],"output":{"name":"","qty":1},"time":""}]}',
 };
 
