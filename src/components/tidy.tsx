@@ -1,5 +1,6 @@
 "use client";
 
+import { blocksToMd, mdToBlocks } from "@/lib/blocks/md";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Check, Paperclip, RotateCcw, Sparkles, X } from "lucide-react";
 import type { BlockNoteEditor, SelectionAttachment } from "./editor";
@@ -62,7 +63,7 @@ export function useTidy(
     const instr = overrideInstruction ?? instruction;
     if (overrideInstruction !== undefined) setInstruction(overrideInstruction);
     // Normalized so export quirks (BlockNote writes "* item") don't show up as "fixes".
-    const md = normalizeMd(editor.blocksToMarkdownLossy(editor.document));
+    const md = normalizeMd(blocksToMd(editor, editor.document));
     const att = attachment;
     const selection = att ? normalizeMd(att.markdown) : null;
     setRunAttachment(att);
@@ -110,7 +111,7 @@ export function useTidy(
 
   function apply() {
     if (!editor || !result) return;
-    const blocks = editor.tryParseMarkdownToBlocks(result.markdown);
+    const blocks = mdToBlocks(editor, result.markdown);
     if (runAttachment) {
       // Replace only the attached blocks.
       const existing = runAttachment.blockIds.map((id) => editor.getBlock(id)).filter((b): b is NonNullable<typeof b> => !!b);
@@ -118,7 +119,7 @@ export function useTidy(
         alert("선택했던 부분이 문서에서 사라졌습니다 (다른 사람이 지웠을 수 있어요). 다시 선택해 주세요.");
         return;
       }
-      const current = normalizeMd(editor.blocksToMarkdownLossy(existing));
+      const current = normalizeMd(blocksToMd(editor, existing));
       if (existing.length !== runAttachment.blockIds.length || current !== original) {
         const ok = confirm("선택한 부분이 그 사이 바뀌었습니다 (다른 사람이 편집했을 수 있어요). 적용하면 그 변경 내용이 덮어써집니다. 계속할까요?");
         if (!ok) return;
@@ -128,7 +129,7 @@ export function useTidy(
       setAttachment(null);
       setRunAttachment(null);
     } else {
-      const current = normalizeMd(editor.blocksToMarkdownLossy(editor.document));
+      const current = normalizeMd(blocksToMd(editor, editor.document));
       if (current !== original) {
         const ok = confirm("정리를 시작한 뒤 문서가 바뀌었습니다 (다른 사람이 편집했을 수 있어요). 적용하면 그 변경 내용이 덮어써집니다. 계속할까요?");
         if (!ok) return;

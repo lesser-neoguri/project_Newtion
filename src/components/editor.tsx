@@ -7,6 +7,7 @@ import * as Y from "yjs";
 import {
   FormattingToolbar,
   FormattingToolbarController,
+  SuggestionMenuController,
   MobileFormattingToolbarController,
   getFormattingToolbarItems,
   useBlockNoteEditor,
@@ -18,6 +19,7 @@ import { BlockNoteView } from "@blocknote/mantine";
 import { withCollaboration, YjsThreadStore } from "@blocknote/core/yjs";
 import { CommentsExtension, DefaultThreadStoreAuth } from "@blocknote/core/comments";
 import { useWorkspace } from "./workspace-context";
+import { newtionSchema, slashItems } from "./blocks/schema";
 import { ko } from "@blocknote/core/locales";
 import type { BlockNoteEditor, PartialBlock } from "@blocknote/core";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -157,6 +159,15 @@ function avatarDataUrl(name: string, color: string) {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
+/** The formatting toolbar, except on Newtion's own blocks (they have their own controls). */
+function TextToolbar({ children }: { children: React.ReactNode }) {
+  const editor = useBlockNoteEditor();
+  const type = editor.getTextCursorPosition().block.type as string;
+  if (OWN_BLOCKS.has(type)) return null;
+  return <FormattingToolbar>{children}</FormattingToolbar>;
+}
+const OWN_BLOCKS = new Set(["cards", "timeline", "pixelCode", "spriteSheet", "pixelArt", "curve", "dropTable", "recipe"]);
+
 export type { BlockNoteEditor };
 export type { SelectionAttachment } from "@/lib/selection";
 
@@ -244,6 +255,7 @@ function EditorInner({
         ...ko,
         placeholders: { ...ko.placeholders, emptyDocument: "'/'를 입력해 명령어 사용", default: "'/'를 입력해 명령어 사용" },
       },
+      schema: newtionSchema,
       uploadFile: (file: File) => uploadFile(sb, workspaceId, file),
       extensions: [comments],
       collaboration: {
@@ -358,13 +370,13 @@ function EditorInner({
 
   const toolbar = useCallback(
     () => (
-      <FormattingToolbar>
+      <TextToolbar>
         {[
           ...(editable && onAskAI ? [<AskAIButton key="ask-ai" onAsk={onAskAI} />] : []),
           ...(editable ? [<ImageButton key="image" />] : []),
           ...getFormattingToolbarItems(),
         ]}
-      </FormattingToolbar>
+      </TextToolbar>
     ),
     [editable, onAskAI],
   );
@@ -375,10 +387,12 @@ function EditorInner({
       editable={editable}
       theme={theme}
       formattingToolbar={false}
+      slashMenu={false}
       // Drag handles are easy to trigger by accident on touch screens and crowd narrow pages.
       sideMenu={!coarse}
       className="min-h-[40vh] pb-32 md:-mx-[54px]"
     >
+      <SuggestionMenuController triggerCharacter="/" getItems={(q) => slashItems(editor, q)} />
       {coarse ? (
         // Phones: always dock the toolbar above the keyboard instead of floating over the selection.
         <MobileFormattingToolbarController formattingToolbar={toolbar} />

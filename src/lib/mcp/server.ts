@@ -6,6 +6,7 @@ import {
   applyBlocks, blocksOf, blocksToMarkdown, docFromStored, encodeDoc, markdownToBlocks, withLiveDoc, type AnyBlock,
 } from "./docs";
 import * as Y from "yjs";
+import { BLOCK_HELP } from "@/lib/blocks/shared";
 
 interface PageData {
   id: string;
@@ -150,7 +151,9 @@ export function createNewtionMcp(token: string) {
         "본문은 Markdown으로 주고받습니다. 일부만 고칠 때는 edit_page(찾아 바꾸기)를, 전체를 다시 쓸 때만 update_page를 쓰세요. " +
         "수정은 열려 있는 편집기에 실시간으로 반영되고, 바뀐 블록만 교체되어 다른 블록의 서식은 유지됩니다. " +
         "웹 게임(SDL2·Emscripten 빌드)은 기획서 페이지 옆에서 실행됩니다. 새 빌드 배포: list_games → start_game_upload → " +
-        "돌려준 bash 스크립트 실행 → publish_game_build. 빌드 파일 내용을 도구 인자로 보내지 마세요.",
+        "돌려준 bash 스크립트 실행 → publish_game_build. 빌드 파일 내용을 도구 인자로 보내지 마세요. " +
+        "본문의 \`\`\`newtion-(종류) 코드 블록은 특수 블록의 JSON 데이터입니다. 관계없으면 그대로 두고, 같은 형식으로 새로 써서 특수 블록을 만들 수도 있습니다: " +
+        Object.entries(BLOCK_HELP).map(([k, v]) => `newtion-${k} = ${v}`).join(" / "),
     },
   );
 

@@ -54,6 +54,14 @@ export function blocksToText(blocks: unknown, depth = 0): string {
       case "codeBlock":
         out.push("```\n" + text + "\n```");
         break;
+      case "callout":
+        out.push(`${b.props?.emoji ?? "💡"} ${text}`);
+        break;
+      case "cards": case "timeline": case "pixelCode": case "spriteSheet": case "pixelArt":
+      case "curve": case "dropTable": case "recipe":
+        // Newtion's custom blocks keep their data as JSON.
+        out.push("```newtion-" + b.type + "\n" + String(b.props?.data ?? "{}") + "\n```");
+        break;
       case "divider":
         out.push("---");
         break;

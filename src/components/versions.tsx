@@ -1,5 +1,6 @@
 "use client";
 
+import { blocksToMd } from "@/lib/blocks/md";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { History, RotateCcw, Save, X } from "lucide-react";
 import { useWorkspace } from "./workspace-context";
@@ -160,8 +161,8 @@ export function VersionPreview({
   const [busy, setBusy] = useState(false);
   const who = version.edited_by ? memberMap.get(version.edited_by) : undefined;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const oldMd = useMemo(() => (editor ? editor.blocksToMarkdownLossy(version.content as any) : ""), [editor, version]);
-  const curMd = editor ? editor.blocksToMarkdownLossy(editor.document) : "";
+  const oldMd = useMemo(() => (editor ? blocksToMd(editor, version.content as any) : ""), [editor, version]);
+  const curMd = editor ? blocksToMd(editor, editor.document) : "";
 
   return (
     <div className="pb-24">

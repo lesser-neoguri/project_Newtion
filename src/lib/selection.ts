@@ -1,3 +1,4 @@
+import { blocksToMd } from "@/lib/blocks/md";
 import type { BlockNoteEditor } from "@blocknote/core";
 
 /** Part of the document the user selected and "attached" for the AI to edit. */
@@ -14,7 +15,7 @@ export function selectionToAttachment(editor: BlockNoteEditor<any, any, any>, al
   const sel = editor.getSelection();
   if (!sel?.blocks?.length && !allowCursor) return null;
   const blocks = sel?.blocks?.length ? sel.blocks : [editor.getTextCursorPosition().block];
-  const markdown = editor.blocksToMarkdownLossy(blocks);
+  const markdown = blocksToMd(editor, blocks);
   if (!markdown.trim()) return null;
   const text = (editor.getSelectedText() || markdown).replace(/\s+/g, " ").trim();
   return {

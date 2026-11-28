@@ -9,6 +9,8 @@
 import * as Y from "yjs";
 import { createClient } from "@supabase/supabase-js";
 import { ServerBlockNoteEditor } from "@blocknote/server-util";
+import { BlockNoteSchema, createBlockSpec, defaultBlockSpecs } from "@blocknote/core";
+import { BLOCK_CONFIGS, fromMdBlocks, toMdBlocks } from "@/lib/blocks/shared";
 import { CommentsExtension, DefaultThreadStoreAuth } from "@blocknote/core/comments";
 import { YjsThreadStore } from "@blocknote/core/yjs";
 // happy-dom instead of jsdom: jsdom pulls in an ES-module dependency that the Vercel function runtime refuses to require().
@@ -22,25 +24,47 @@ type Editor = ReturnType<typeof ServerBlockNoteEditor.create>;
 export type AnyBlock = any;
 
 let editor: Editor | null = null;
+let serverDoc: Document | null = null;
+
+/** Newtion's custom blocks, so the server reads and keeps them (rendering is never needed here). */
+function serverSchema() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const specs: Record<string, any> = {};
+  for (const [key, cfg] of Object.entries(BLOCK_CONFIGS)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    specs[key] = createBlockSpec(cfg as any, {
+      render: () => {
+        const dom = serverDoc!.createElement("div");
+        if (cfg.content === "inline") { const c = serverDoc!.createElement("div"); dom.appendChild(c); return { dom, contentDOM: c }; }
+        return { dom };
+      },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)();
+  }
+  return BlockNoteSchema.create({ blockSpecs: { ...defaultBlockSpecs, ...specs } });
+}
+
 function ed(): Editor {
   // The comments extension only adds the "comment" mark to the schema: without it, text that has an
   // inline comment would be read as empty and an edit could wipe it.
+  if (!editor) serverDoc = new Window().document as unknown as Document;
   if (!editor) editor = ServerBlockNoteEditor.create({
+    schema: serverSchema(),
     extensions: [CommentsExtension({
       threadStore: new YjsThreadStore("server", new Y.Doc().getMap("threads"), new DefaultThreadStoreAuth("server", "editor")),
       resolveUsers: async () => [],
     })],
-  }, new Window().document as unknown as Document);
+  }, serverDoc!) as unknown as Editor;
   return editor;
 }
 
 export async function markdownToBlocks(md: string): Promise<AnyBlock[]> {
-  return ed().tryParseMarkdownToBlocks(md);
+  return fromMdBlocks(await ed().tryParseMarkdownToBlocks(md));
 }
 
 export async function blocksToMarkdown(blocks: AnyBlock[]): Promise<string> {
   if (!blocks.length) return "";
-  return (await ed().blocksToMarkdownLossy(blocks)).trimEnd();
+  return (await ed().blocksToMarkdownLossy(toMdBlocks(blocks))).trimEnd();
 }
 
 /** Builds the page's Y.Doc from its stored state (or its JSON content for pages never opened in the editor). */
