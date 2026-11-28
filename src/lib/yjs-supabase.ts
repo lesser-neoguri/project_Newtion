@@ -36,7 +36,9 @@ export class SupabaseYProvider {
   ) {
     this.awareness = new Awareness(doc);
     this.channel = sb.channel(`ydoc:${room}`, {
-      config: { broadcast: { self: false, ack: false } },
+      // Presence (keyed by Yjs client id) tells us right away when a tab disconnects,
+      // even if it never got to send "remove my cursor".
+      config: { broadcast: { self: false, ack: false }, presence: { key: String(doc.clientID) } },
     });
 
     this.channel
@@ -65,9 +67,16 @@ export class SupabaseYProvider {
       .on("broadcast", { event: "awareness" }, ({ payload }) => {
         applyAwarenessUpdate(this.awareness, fromB64(payload.u), this);
       })
+      .on("presence", { event: "leave" }, ({ key }) => {
+        const id = Number(key);
+        if (Number.isFinite(id) && id !== this.doc.clientID && this.awareness.getStates().has(id)) {
+          removeAwarenessStates(this.awareness, [id], this);
+        }
+      })
       .subscribe((status) => {
         if (status === "SUBSCRIBED") {
           this.connected = true;
+          void this.channel.track({ at: Date.now() });
           this.send("sync-req", {
             from: this.doc.clientID,
             sv: toB64(Y.encodeStateVector(this.doc)),
@@ -82,7 +91,12 @@ export class SupabaseYProvider {
 
     doc.on("update", this.onDocUpdate);
     this.awareness.on("update", this.onAwarenessUpdate);
-    if (typeof window !== "undefined") window.addEventListener("beforeunload", this.onUnload);
+    if (typeof window !== "undefined") {
+      window.addEventListener("beforeunload", this.onUnload);
+      // Phones often skip beforeunload; pagehide fires when the tab is closed or put in the background.
+      window.addEventListener("pagehide", this.onUnload);
+      window.addEventListener("pageshow", this.onShow);
+    }
   }
 
   onSynced(cb: () => void) {
@@ -112,6 +126,8 @@ export class SupabaseYProvider {
     origin: unknown,
   ) => {
     if (origin === this) return;
+    const mine = this.awareness.getLocalState();
+    if (mine) this._lastState = mine;
     const changed = added.concat(updated, removed);
     this.send("awareness", { u: toB64(encodeAwarenessUpdate(this.awareness, changed)) });
   };
@@ -120,12 +136,23 @@ export class SupabaseYProvider {
     removeAwarenessStates(this.awareness, [this.doc.clientID], "unload");
   };
 
+  // Back from the background (bfcache): announce ourselves again.
+  private onShow = (e: PageTransitionEvent) => {
+    if (!e.persisted) return;
+    if (this._lastState) this.awareness.setLocalState(this._lastState);
+  };
+  private _lastState: Record<string, unknown> | null = null;
+
   destroy() {
     removeAwarenessStates(this.awareness, [this.doc.clientID], "destroy");
     this.doc.off("update", this.onDocUpdate);
     this.awareness.off("update", this.onAwarenessUpdate);
     this.awareness.destroy();
-    if (typeof window !== "undefined") window.removeEventListener("beforeunload", this.onUnload);
+    if (typeof window !== "undefined") {
+      window.removeEventListener("beforeunload", this.onUnload);
+      window.removeEventListener("pagehide", this.onUnload);
+      window.removeEventListener("pageshow", this.onShow);
+    }
     void this.sb.removeChannel(this.channel);
   }
 }

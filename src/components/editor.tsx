@@ -168,6 +168,32 @@ function TextToolbar({ children }: { children: React.ReactNode }) {
 }
 const OWN_BLOCKS = new Set(["cards", "timeline", "pixelCode", "spriteSheet", "pixelArt", "curve", "dropTable", "recipe"]);
 
+function hiddenCursor() {
+  const s = document.createElement("span");
+  s.style.display = "none";
+  return s;
+}
+
+/** Same markup as BlockNote's default collaboration cursor. */
+function cursorEl(user: { name: string; color: string }) {
+  const hex = user.color.replace("#", "");
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.length === 3 ? hex[i / 2] + hex[i / 2] : hex.slice(i, i + 2), 16) || 0);
+  const text = 0.299 * r + 0.587 * g + 0.114 * b < 150 ? "white" : "black";
+  const base = document.createElement("span");
+  base.classList.add("bn-collaboration-cursor__base");
+  const caret = document.createElement("span");
+  caret.setAttribute("contenteditable", "false");
+  caret.classList.add("bn-collaboration-cursor__caret");
+  caret.setAttribute("style", `background-color: ${user.color}; color: ${text}`);
+  const label = document.createElement("span");
+  label.classList.add("bn-collaboration-cursor__label");
+  label.setAttribute("style", `background-color: ${user.color}; color: ${text}`);
+  label.textContent = user.name;
+  caret.appendChild(label);
+  base.append("\u2060", caret, "\u2060");
+  return base;
+}
+
 export type { BlockNoteEditor };
 export type { SelectionAttachment } from "@/lib/selection";
 
@@ -261,7 +287,9 @@ function EditorInner({
       collaboration: {
         fragment,
         provider,
-        user: { name: me.display_name || me.email, color: me.avatar_color },
+        user: { id: me.id, name: me.display_name || me.email, color: me.avatar_color },
+        // Your own other tabs/devices are not "someone else": don't draw their cursors.
+        renderCursor: (user: { id?: string; name: string; color: string }) => (user.id === me.id ? hiddenCursor() : cursorEl(user)),
         showCursorLabels: "activity",
       },
     }),
