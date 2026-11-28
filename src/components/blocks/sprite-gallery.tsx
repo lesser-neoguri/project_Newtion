@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Download, ListPlus, Plus, Trash2, Upload, X } from "lucide-react";
 import { Btn, Field, Shell, uid, useBlockData, type AnyBlock, type AnyEditor } from "./common";
 import { download, framesToGif, loadImage, sheetFrames, sheetToGif } from "@/lib/gif";
@@ -31,11 +32,58 @@ function Sprite({ s, maxW, maxH, onClick }: { s: Sprite; maxW?: number; maxH?: n
 }
 
 /** List stage sized around the sprite (the sprite never gets squeezed). */
-const stageSize = (s: Sprite) => {
+const stageSize = (s: Sprite, width: number) => {
   const k = pixelScale(s);
-  if (!s.gif || !k) return { width: 210, height: 150 };
-  return { width: Math.min(360, Math.max(210, s.w! * k + 28)), height: Math.max(130, s.h! * k + 30) };
+  if (!s.gif || !k) return { width, height: 150 };
+  return { width, height: Math.max(130, s.h! * k + 30) };
 };
+/** One stage width for the whole list, so the text column lines up. */
+const listStageWidth = (items: Sprite[]) =>
+  Math.min(360, Math.max(210, ...items.map((s) => (s.gif && pixelScale(s) ? s.w! * pixelScale(s) + 28 : 0))));
+
+/** Full-screen view of one sprite: big crisp sprite, stats, lore. Rendered on <body>, outside the editor. */
+function Zoom({ s, onClose }: { s: Sprite; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { window.removeEventListener("keydown", onKey); document.body.style.overflow = prev; };
+  }, [onClose]);
+  const vw = typeof window !== "undefined" ? window.innerWidth : 800;
+  const k = s.w && s.h ? Math.max(1, Math.min(8, Math.floor(Math.min((Math.min(vw, 720) - 64) / s.w, 300 / s.h)))) : 0;
+  return createPortal(
+    <div className="nb-zoom" onClick={onClose}>
+      <div className="nb-zoom-card" onClick={(e) => e.stopPropagation()}>
+        <button type="button" className="nb-zoom-x" onClick={onClose} aria-label="닫기"><X size={18} /></button>
+        <div className="nb-hangar nb-zoom-stage">
+          <div className="nb-stage-btn" style={{ cursor: "default" }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={s.gif} alt={s.name} style={k ? { width: s.w! * k, height: s.h! * k } : { maxWidth: "100%", maxHeight: 300 }} />
+            <span className="nb-shadow" style={{ width: k ? s.w! * k * 0.8 : "60%" }} />
+          </div>
+        </div>
+        <div className="nb-zoom-body">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-lg font-semibold">{s.name}</span>
+            {s.tier && <span className="nb-tier" style={{ color: TIERS[s.tier], borderColor: TIERS[s.tier] }}>{s.tier}</span>}
+            {s.tag && <span className="text-xs opacity-60">{s.tag}</span>}
+          </div>
+          {s.desc && <p className="mt-1 text-sm opacity-90">{s.desc}</p>}
+          {!!s.stats?.length && (
+            <dl className="nb-stats">
+              {s.stats.map((x, i) => <div key={i} className={x.v.length > 22 ? "nb-stat-wide" : ""}><dt>{x.k}</dt><dd>{x.v}</dd></div>)}
+            </dl>
+          )}
+          {s.lore && <p className="nb-lore">{s.lore}</p>}
+          {s.tip && <p className="mt-2 text-xs opacity-70">💡 {s.tip}</p>}
+          <a href={s.gif} download={`${s.name || "sprite"}.gif`} className="nb-btn mt-3 inline-flex"><Download size={13} /> GIF 받기</a>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
 
 const statsText = (st?: Stat[]) => (st ?? []).map((x) => `${x.k}: ${x.v}`).join("\n");
 const parseStats = (t: string): Stat[] => t.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
@@ -96,6 +144,7 @@ export function SpriteGalleryView({ block, editor }: { block: AnyBlock; editor: 
   const editing = editable && edit;
   const tags = useMemo(() => [...new Set(d.items.map((i) => i.tag).filter(Boolean))], [d.items]);
   const shown = filter ? d.items.filter((i) => i.tag === filter) : d.items;
+  const stageW = listStageWidth(d.items);
   const done = d.items.filter((i) => i.gif).length;
   const upd = (id: string, f: Partial<Sprite>) => set((x) => ({ ...x, items: x.items.map((i) => (i.id === id ? { ...i, ...f } : i)) }));
 
@@ -111,12 +160,12 @@ export function SpriteGalleryView({ block, editor }: { block: AnyBlock; editor: 
   const bg = d.bg === "checker" ? "nb-checker" : d.bg === "light" ? "bg-white" : "bg-[#0b1020]";
 
   return (
-    <Shell icon="🎞️" title={`스프라이트 도감 · ${done}/${d.items.length}`} actions={
+    <Shell bare className={editing ? "nb-editing" : ""} icon="🎞️" title={`스프라이트 도감 · ${done}/${d.items.length}`} actions={
       <>
         <Btn active={d.layout === "list"} onClick={() => editable && set({ ...d, layout: "list" })}>목록</Btn>
         <Btn active={d.layout === "grid"} onClick={() => editable && set({ ...d, layout: "grid" })}>격자</Btn>
         {editable && <Btn title="표의 첫 열(모듈 이름)·효과·비고를 항목으로 불러오기 (바로 위에 표가 있으면 그 표만)" onClick={importNames}><ListPlus size={13} /> 표에서 불러오기</Btn>}
-        {editable && <Btn active={edit} onClick={() => setEdit((v) => !v)}>{edit ? "완료" : "편집"}</Btn>}
+        {editable && <span className="nb-keep"><Btn active={edit} onClick={() => setEdit((v) => !v)}>{edit ? "완료" : "편집"}</Btn></span>}
       </>
     }>
       {(tags.length > 1 || editing) && (
@@ -147,7 +196,7 @@ export function SpriteGalleryView({ block, editor }: { block: AnyBlock; editor: 
         <div className="nb-slist">
           {shown.map((s) => (
             <div key={s.id} className="nb-srow">
-              <div className={`nb-hangar nb-srow-img ${d.bg === "dark" ? "" : bg}`} style={stageSize(s)}>
+              <div className={`nb-hangar nb-srow-img ${d.bg === "dark" ? "" : bg}`} style={stageSize(s, stageW)}>
                 {s.gif ? (
                   <Sprite s={s} onClick={() => setZoom(s)} />
                 ) : editable ? (
@@ -155,7 +204,7 @@ export function SpriteGalleryView({ block, editor }: { block: AnyBlock; editor: 
                 ) : (
                   <span className="text-xs text-white/40">아직 없음</span>
                 )}
-                {s.gif && editable && (
+                {s.gif && editing && (
                   <button type="button" title="바꾸기" className="nb-card-imgbtn" onClick={() => setUploadFor(s)}><Upload size={12} /></button>
                 )}
               </div>
@@ -192,7 +241,12 @@ export function SpriteGalleryView({ block, editor }: { block: AnyBlock; editor: 
                         ))}
                       </dl>
                     )}
-                    {s.lore && <p className="nb-lore">{s.lore}</p>}
+                    {s.lore && (
+                      <details className="nb-lore-d">
+                        <summary>배경 설정</summary>
+                        <p className="nb-lore">{s.lore}</p>
+                      </details>
+                    )}
                     {s.tip && <p className="mt-1.5 text-xs text-muted">💡 {s.tip}</p>}
                     {s.note && !s.stats?.length && <p className="mt-1 text-xs text-muted">{s.note}</p>}
                   </>
@@ -217,7 +271,7 @@ export function SpriteGalleryView({ block, editor }: { block: AnyBlock; editor: 
               ) : (
                 <span className="text-xs text-white/40">아직 없음</span>
               )}
-              {s.gif && editable && (
+              {s.gif && editing && (
                 <button type="button" title="바꾸기" className="nb-card-imgbtn" onClick={() => setUploadFor(s)}><Upload size={12} /></button>
               )}
             </div>
@@ -262,20 +316,7 @@ export function SpriteGalleryView({ block, editor }: { block: AnyBlock; editor: 
           }}
         />
       )}
-      {zoom && (
-        <div className="fixed inset-0 z-[98] flex flex-col items-center justify-center gap-3 bg-black/85 p-4" onClick={() => setZoom(null)}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={zoom.gif} alt={zoom.name} className="max-h-[70vh] max-w-full object-contain" style={{ imageRendering: "pixelated", width: zoom.w ? zoom.w * Math.max(1, Math.min(6, Math.floor(560 / zoom.w), Math.floor(420 / (zoom.h ?? zoom.w)))) : undefined }} />
-          <div className="max-w-lg text-center text-white">
-            <div className="font-semibold">{zoom.name}{zoom.tier ? ` · ${zoom.tier}` : ""}</div>
-            <div className="text-xs text-white/60">{[zoom.tag, zoom.desc].filter(Boolean).join(" · ")}</div>
-            {zoom.lore && <p className="mt-2 text-xs leading-relaxed text-white/75">{zoom.lore}</p>}
-          </div>
-          <a href={zoom.gif} download={`${zoom.name || "sprite"}.gif`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1 rounded-md bg-white/15 px-3 py-1.5 text-sm text-white hover:bg-white/25">
-            <Download size={14} /> GIF 받기
-          </a>
-        </div>
-      )}
+      {zoom && <Zoom s={zoom} onClose={() => setZoom(null)} />}
     </Shell>
   );
 }

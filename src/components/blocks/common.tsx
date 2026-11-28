@@ -76,9 +76,25 @@ export function Field({
   );
 }
 
-export function Shell({ icon, title, actions, children, className = "" }: { icon: string; title: string; actions?: ReactNode; children: ReactNode; className?: string }) {
+export function Shell({ icon, title, actions, children, className = "", bare }: {
+  icon: string; title: string; actions?: ReactNode; children: ReactNode; className?: string;
+  /** No frame: the block reads like part of the page; its controls show on hover (desktop). */
+  bare?: boolean;
+}) {
+  // Taps/clicks inside a block belong to the block. Without this the editor (which listens on its root,
+  // before React's handlers run) treats them as "select this whole block" — the blue box on phones.
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const stop = (e: Event) => e.stopPropagation();
+    // Only the events ProseMirror uses to pick a node selection. Clicks and pointer events still reach React.
+    const events = ["mousedown", "touchstart"];
+    events.forEach((ev) => el.addEventListener(ev, stop));
+    return () => events.forEach((ev) => el.removeEventListener(ev, stop));
+  }, []);
   return (
-    <div className={`nb-block ${className}`} contentEditable={false}>
+    <div ref={ref} className={`nb-block ${bare ? "nb-bare" : ""} ${className}`} contentEditable={false}>
       <div className="nb-head">
         <span className="nb-title"><span>{icon}</span>{title}</span>
         <span className="nb-actions">{actions}</span>
