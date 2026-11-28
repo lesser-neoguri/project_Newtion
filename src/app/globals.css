@@ -281,11 +281,11 @@ select.nb-field { border-color: var(--border); padding: 1px 2px; }
 .nb-stats .nb-stat-wide { grid-column: 1 / -1; }
 .nb-stats dt { flex-shrink: 0; color: var(--muted); width: 3.2em; }
 .nb-stats dd { margin: 0; min-width: 0; font-variant-numeric: tabular-nums; }
-.nb-lore { margin-top: 8px; padding: 6px 10px; border-left: 3px solid #b45309; background: rgba(180,83,9,.06); border-radius: 0 6px 6px 0;
+.nb-lore { margin-top: 8px; padding: 7px 12px; border-left: 3px solid #b45309; background: rgba(180,83,9,.06); border-radius: 0 6px 6px 0;
   font-size: 13px; line-height: 1.6; color: var(--foreground); opacity: .9; }
 .nb-srow { gap: 16px; padding: 14px 2px; }
 @media (max-width: 640px) {
   .nb-srow { flex-direction: column; }
-  .nb-srow-img { width: 100% !important; height: 170px !important; }
+  .nb-srow-img { width: 100% !important; }
   .nb-stats { grid-template-columns: 1fr 1fr; }
 }

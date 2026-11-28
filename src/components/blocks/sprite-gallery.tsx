@@ -13,18 +13,29 @@ interface Sprite {
 
 const TIERS: Record<string, string> = { 시작: "#9ca3af", 초반: "#22c55e", 중반: "#3b82f6", 후반: "#a855f7", 유물: "#f59e0b" };
 
-/** Pixel art shown at a whole-number scale (crisp), as large as fits — same density for every sprite. */
-function Sprite({ s, maxW, maxH, onClick }: { s: Sprite; maxW: number; maxH: number; onClick: () => void }) {
-  const k = s.w && s.h ? Math.max(1, Math.min(3, Math.floor(Math.min(maxW / s.w, maxH / s.h)))) : 0;
+/** Whole-number pixel scale for a sprite: small parts ×3, most modules ×2, the very large ones ×1. */
+const pixelScale = (s: Sprite) => (!s.w || !s.h ? 0 : Math.max(s.w, s.h) <= 50 ? 3 : Math.max(s.w, s.h) <= 120 ? 2 : 1);
+
+/** Pixel art shown at a whole-number scale (crisp). In the grid it also shrinks to fit the card. */
+function Sprite({ s, maxW, maxH, onClick }: { s: Sprite; maxW?: number; maxH?: number; onClick: () => void }) {
+  const base = pixelScale(s);
+  const k = base && maxW && maxH ? Math.max(1, Math.min(base, Math.floor(Math.min(maxW / s.w!, maxH / s.h!)))) : base;
   return (
     <button type="button" className="nb-stage-btn" onClick={onClick} title="크게 보기">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={s.gif} alt={s.name} loading="lazy"
         style={k ? { width: s.w! * k, height: s.h! * k, maxWidth: "100%", maxHeight: "100%" } : { maxWidth: "100%", maxHeight: "100%" }} />
-      <span className="nb-shadow" style={{ width: k ? Math.min(s.w! * k * 0.8, maxW) : "60%" }} />
+      <span className="nb-shadow" style={{ width: k ? s.w! * k * 0.8 : "60%" }} />
     </button>
   );
 }
+
+/** List stage sized around the sprite (the sprite never gets squeezed). */
+const stageSize = (s: Sprite) => {
+  const k = pixelScale(s);
+  if (!s.gif || !k) return { width: 210, height: 150 };
+  return { width: Math.min(360, Math.max(210, s.w! * k + 28)), height: Math.max(130, s.h! * k + 30) };
+};
 
 const statsText = (st?: Stat[]) => (st ?? []).map((x) => `${x.k}: ${x.v}`).join("\n");
 const parseStats = (t: string): Stat[] => t.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
@@ -136,9 +147,9 @@ export function SpriteGalleryView({ block, editor }: { block: AnyBlock; editor: 
         <div className="nb-slist">
           {shown.map((s) => (
             <div key={s.id} className="nb-srow">
-              <div className={`nb-hangar nb-srow-img ${d.bg === "dark" ? "" : bg}`} style={{ width: Math.max(d.size, 120) * 1.7, height: Math.max(d.size, 120) * 1.35 }}>
+              <div className={`nb-hangar nb-srow-img ${d.bg === "dark" ? "" : bg}`} style={stageSize(s)}>
                 {s.gif ? (
-                  <Sprite s={s} maxW={Math.max(d.size, 120) * 1.7 - 16} maxH={Math.max(d.size, 120) * 1.35 - 26} onClick={() => setZoom(s)} />
+                  <Sprite s={s} onClick={() => setZoom(s)} />
                 ) : editable ? (
                   <button type="button" className="nb-gempty" onClick={() => setUploadFor(s)}><Upload size={16} />올리기</button>
                 ) : (
