@@ -129,6 +129,7 @@ Claude Code, Claude 데스크톱, OpenAI Codex(CLI·IDE 확장)가 내 권한으
 | `query_database`, `add_database_row`, `update_database_row` | 데이터베이스 보기·항목 추가·수정 (속성은 이름으로) |
 | `list_versions`, `read_version`, `restore_version` | 버전 기록 보기·버전 내용 읽기·복원 (복원 전 상태도 버전으로 남음) |
 | `add_comment` | 댓글 달기 |
+| `list_sprites`, `start_sprite_upload`, `set_sprites` | 스프라이트 도감 항목 보기 → 업로드 티켓·bash 스크립트로 GIF/PNG 올리기(2시간) → 모듈 이름으로 GIF 연결 (PNG 스프라이트 시트는 서버에서 GIF로 변환) |
 | `list_games`, `create_game`, `link_game` | 웹 게임 목록·만들기·기획서 페이지에 연결 |
 | `start_game_upload`, `publish_game_build`, `list_game_builds` | 새 버전 업로드(업로드용 bash 스크립트 발급) → 게시 → 버전 목록 |
 

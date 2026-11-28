@@ -87,6 +87,19 @@ export function createNewtionMcp(token: string) {
     return stats;
   }
 
+  /** Edit the body from its live state (open tabs included): transform the current blocks. */
+  async function editBody(p: PageData, transform: (blocks: AnyBlock[]) => AnyBlock[] | Promise<AnyBlock[]>, message: string) {
+    if (p.role === "viewer") throw new ToolError("no permission");
+    const doc = docFromStored(p.ydoc, p.content);
+    const stats = await withLiveDoc(p.id, doc, async (d) => applyBlocks(d, await transform(blocksOf(d))));
+    const after = blocksOf(doc);
+    await rpc("mcp_save_page", { p_page: p.id, p_content: after, p_ydoc: encodeDoc(doc) });
+    if (stats.changed) {
+      await rpc("mcp_create_version", { p_page: p.id, p_title: p.title, p_content: after, p_source: "mcp", p_label: message.slice(0, 120) });
+    }
+    return stats;
+  }
+
   // ---- database helpers ----
   const findProp = (schema: DbSchema, key: string) =>
     schema.properties.find((p) => p.name === key || p.id === key) ??
@@ -152,6 +165,7 @@ export function createNewtionMcp(token: string) {
         "수정은 열려 있는 편집기에 실시간으로 반영되고, 바뀐 블록만 교체되어 다른 블록의 서식은 유지됩니다. " +
         "웹 게임(SDL2·Emscripten 빌드)은 기획서 페이지 옆에서 실행됩니다. 새 빌드 배포: list_games → start_game_upload → " +
         "돌려준 bash 스크립트 실행 → publish_game_build. 빌드 파일 내용을 도구 인자로 보내지 마세요. " +
+        "스프라이트 도감의 모듈 GIF는 list_sprites → start_sprite_upload → 스크립트 실행 → set_sprites로 넣습니다. " +
         "본문의 \`\`\`newtion-(종류) 코드 블록은 특수 블록의 JSON 데이터입니다. 관계없으면 그대로 두고, 같은 형식으로 새로 써서 특수 블록을 만들 수도 있습니다: " +
         Object.entries(BLOCK_HELP).map(([k, v]) => `newtion-${k} = ${v}`).join(" / "),
     },
@@ -409,6 +423,137 @@ export function createNewtionMcp(token: string) {
   }, guard(async ({ page_id, text: body }: { page_id: string; text: string }) => {
     await rpc("mcp_add_comment", { p_page: page_id, p_body: body });
     return text("댓글을 달았습니다.");
+  }));
+
+  /* ---------------------------------------------------------------- */
+  /* Sprite gallery (모듈 도감 등): GIF per item                        */
+  /* ---------------------------------------------------------------- */
+
+  type SpriteItem = { id: string; name: string; tag?: string; desc?: string; note?: string; gif?: string; w?: number; h?: number };
+  const galleries = (blocks: AnyBlock[]) => blocks.map((b, i) => ({ b, i })).filter(({ b }) => b.type === "spriteGallery");
+  const itemsOf = (b: AnyBlock): SpriteItem[] => { try { return JSON.parse(b.props?.data || "{}").items ?? []; } catch { return []; } };
+  const norm = (s: string) => s.toLowerCase().replace(/[\s·()（）\[\]{}_\-.,/]+/g, "");
+  const SUPA = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
+  const pathUrl = (path: string) => `${SUPA}/storage/v1/object/public/uploads/${path.split("/").map(encodeURIComponent).join("/")}`;
+
+  server.registerTool("list_sprites", {
+    title: "스프라이트 목록 보기",
+    description: "페이지의 스프라이트 도감 블록(모듈별 이미지 목록)과 각 항목의 이름·분류·GIF 유무를 봅니다. set_sprites로 GIF를 넣기 전에 이름을 확인하세요.",
+    inputSchema: { page_id: z.string().uuid(), missing_only: z.boolean().optional().describe("GIF가 아직 없는 항목만") },
+  }, guard(async ({ page_id, missing_only }: { page_id: string; missing_only?: boolean }) => {
+    const p = await getPage(page_id);
+    const doc = docFromStored(p.ydoc, p.content);
+    const gs = galleries(blocksOf(doc));
+    if (!gs.length) return text("이 페이지에는 스프라이트 도감 블록이 없습니다. 본문에 ```newtion-spriteGallery 블록을 추가하거나 사용자에게 /스프라이트 도감 을 넣어 달라고 하세요.");
+    const lines: string[] = [];
+    let total = 0, done = 0;
+    gs.forEach(({ b }, gi) => {
+      const items = itemsOf(b);
+      total += items.length; done += items.filter((x) => x.gif).length;
+      lines.push(`## 목록 ${gi + 1}${items[0]?.tag ? ` · ${items[0].tag}` : ""} (${items.filter((x) => x.gif).length}/${items.length})`);
+      for (const it of items) if (!missing_only || !it.gif) lines.push(`- ${it.name}${it.gif ? " ✅" : " ⬜"}  (id: ${it.id})`);
+    });
+    return text(`${p.title}: GIF ${done}/${total}\n\n${lines.join("\n")}`);
+  }));
+
+  server.registerTool("start_sprite_upload", {
+    title: "스프라이트 파일 업로드 시작",
+    description:
+      "스프라이트 GIF(또는 스프라이트 시트 PNG)를 올리기 위한 업로드 티켓과 bash 스크립트를 받습니다. 스크립트를 셸에서 실행해 폴더의 파일을 올린 뒤(2시간 안에), " +
+      "set_sprites로 각 파일을 모듈에 연결하세요. 파일 내용을 도구 인자로 보내지 마세요. 파일 이름은 영문·숫자를 권장합니다.",
+    inputSchema: {
+      page_id: z.string().uuid(),
+      dir: z.string().max(500).optional().describe("올릴 파일이 있는 폴더 (기본 ./sprites). .gif .png .webp만 올립니다"),
+    },
+  }, guard(async ({ page_id, dir }: { page_id: string; dir?: string }) => {
+    const t = await rpc<{ ticket: string; prefix: string }>("mcp_create_upload_ticket", { p_page: page_id });
+    const d = (dir ?? "./sprites").replace(/'/g, "'\\''");
+    const script = [
+      "#!/usr/bin/env bash",
+      "set -euo pipefail",
+      `cd '${d}'`,
+      `U='${SUPA}/storage/v1/object/uploads/${t.prefix}'`,
+      `K='${KEY}'  # 공개(publishable) 키. 이 티켓 경로에만 2시간 동안 올릴 수 있음`,
+      "for f in *.gif *.png *.webp *.GIF *.PNG; do",
+      "  [ -f \"$f\" ] || continue",
+      "  case \"$f\" in *.gif|*.GIF) t=image/gif;; *.png|*.PNG) t=image/png;; *) t=image/webp;; esac",
+      "  enc=$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1]))' \"$f\")",
+      "  curl -sS --fail-with-body -X POST \"$U/$enc\" -H \"apikey: $K\" -H \"Authorization: Bearer $K\" -H \"Content-Type: $t\" --data-binary \"@$f\" > /dev/null",
+      "  echo \"uploaded $f\"",
+      "done",
+    ].join("\n");
+    return text(
+      `업로드 티켓: ${t.ticket}\n\n아래 스크립트로 파일을 올리세요 (네트워크에서 ${new URL(SUPA).host} 접근 필요):\n\n\`\`\`bash\n${script}\n\`\`\`\n\n` +
+      `그다음 set_sprites(page_id, ticket: "${t.ticket}", sprites: [{ module: "모듈 이름", file: "올린 파일 이름" }, ...])를 호출하세요. ` +
+      `PNG 스프라이트 시트는 sheet: { fw, fh, fps, frames?, scale?, pingpong? }를 주면 서버에서 GIF로 바꿔 넣습니다.`);
+  }));
+
+  server.registerTool("set_sprites", {
+    title: "모듈에 스프라이트 GIF 넣기",
+    description:
+      "start_sprite_upload로 올린 파일을 스프라이트 도감의 항목(모듈)에 연결합니다. 여러 개를 한 번에 넣을 수 있습니다. " +
+      "module은 항목 이름(공백·기호 무시) 또는 id. GIF는 그대로, PNG 스프라이트 시트는 sheet 설정으로 서버에서 GIF로 변환합니다. 열려 있는 탭에 바로 반영되고 버전 기록에 남습니다.",
+    inputSchema: {
+      page_id: z.string().uuid(),
+      ticket: z.string().uuid(),
+      sprites: z.array(z.object({
+        module: z.string().min(1).describe("항목 이름 또는 id"),
+        file: z.string().min(1).describe("업로드한 파일 이름 (예: diesel_engine.gif)"),
+        sheet: z.object({
+          fw: z.number().int().positive().optional(), fh: z.number().int().positive().optional(),
+          frames: z.number().int().min(0).optional(), start: z.number().int().min(0).optional(),
+          fps: z.number().positive().max(60).optional(), scale: z.number().int().min(1).max(8).optional(), pingpong: z.boolean().optional(),
+        }).optional().describe("PNG 스프라이트 시트일 때 프레임 설정 (fw·fh 생략 시 가로 한 줄의 정사각형 프레임으로 추정)"),
+      })).min(1).max(200),
+    },
+  }, guard(async ({ page_id, ticket, sprites }: { page_id: string; ticket: string; sprites: { module: string; file: string; sheet?: Record<string, number | boolean> }[] }) => {
+    const p = await getPage(page_id);
+    const prefix = `${p.workspace_id}/t-${ticket}`;
+    const { pngSheetToGif, gifSize } = await import("@/lib/gif-node");
+
+    // Resolve every file first (download, convert sheets), then edit the page once.
+    const ready: { module: string; url: string; w?: number; h?: number }[] = [];
+    const problems: string[] = [];
+    for (const s of sprites) {
+      const path = `${prefix}/${s.file}`;
+      const res = await fetch(pathUrl(path));
+      if (!res.ok) { problems.push(`${s.module}: '${s.file}' 파일을 찾을 수 없어요 (업로드 스크립트를 실행했는지, 파일 이름이 맞는지 확인)`); continue; }
+      const buf = Buffer.from(await res.arrayBuffer());
+      const size = gifSize(buf);
+      if (size) { ready.push({ module: s.module, url: pathUrl(path), w: size.width, h: size.height }); continue; }
+      if (buf.subarray(1, 4).toString() !== "PNG") { problems.push(`${s.module}: GIF나 PNG가 아니에요`); continue; }
+      try {
+        const g = pngSheetToGif(buf, (s.sheet ?? {}) as never);
+        const out = `${prefix}/gif-${Date.now().toString(36)}-${s.file.replace(/\.[^.]+$/, "")}.gif`;
+        const { error } = await sb.storage.from("uploads").upload(out, Buffer.from(g.gif), { contentType: "image/gif", cacheControl: "31536000" });
+        if (error) throw error;
+        ready.push({ module: s.module, url: pathUrl(out), w: g.width, h: g.height });
+      } catch (e) { problems.push(`${s.module}: GIF 변환 실패 (${(e as Error).message})`); }
+    }
+
+    const matched: string[] = [];
+    const unmatched = new Set(ready.map((r) => r.module));
+    if (ready.length) {
+      await editBody(p, (blocks) => blocks.map((b) => {
+        if (b.type !== "spriteGallery") return b;
+        let data: { items?: SpriteItem[] } & Record<string, unknown>;
+        try { data = JSON.parse(b.props?.data || "{}"); } catch { return b; }
+        let changed = false;
+        const items = (data.items ?? []).map((it) => {
+          const hit = ready.find((r) => r.module === it.id) ?? ready.find((r) => norm(r.module) === norm(it.name));
+          if (!hit) return it;
+          changed = true;
+          unmatched.delete(hit.module);
+          matched.push(it.name);
+          return { ...it, gif: hit.url, w: hit.w, h: hit.h };
+        });
+        return changed ? { ...b, props: { ...b.props, data: JSON.stringify({ ...data, items }) } } : b;
+      }), `스프라이트 GIF ${ready.length}개 넣기`);
+    }
+    for (const m of unmatched) problems.push(`${m}: 같은 이름의 항목이 없어요 (list_sprites로 이름 확인)`);
+    return text(`넣었습니다: ${matched.length}개${matched.length ? ` (${matched.slice(0, 20).join(", ")}${matched.length > 20 ? " …" : ""})` : ""}` +
+      (problems.length ? `\n\n확인 필요:\n- ${problems.join("\n- ")}` : "") + `\n${pageUrl(p)}`);
   }));
 
   /* ---------------------------------------------------------------- */
