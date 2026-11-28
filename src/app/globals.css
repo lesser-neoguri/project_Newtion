@@ -338,3 +338,14 @@ select.nb-field { border-color: var(--border); padding: 1px 2px; }
   .nb-zoom-stage { height: 260px; }
 }
 @keyframes nb-fade { from { opacity: 0 } to { opacity: 1 } }
+
+/* --- grid view, same look as the list --- */
+.nb-ggrid { display: grid; gap: 26px 18px; padding: 6px 0 4px; }
+.nb-gitem { min-width: 0; }
+.nb-gtext { display: flex; flex-direction: column; gap: 3px; width: 100%; padding: 10px 2px 0; text-align: left; }
+.nb-gdesc { font-size: 13px; line-height: 1.45; color: var(--foreground); opacity: .85; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.nb-gstats { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.nb-gadd { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: 1px dashed var(--border);
+  border-radius: 8px; color: var(--muted); font-size: 13px; }
+.nb-gadd:hover { background: var(--hover); }
+@media (max-width: 640px) { .nb-ggrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 22px 12px; } }

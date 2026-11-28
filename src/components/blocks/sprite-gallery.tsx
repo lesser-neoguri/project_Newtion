@@ -37,6 +37,13 @@ const stageSize = (s: Sprite, width: number) => {
   if (!s.gif || !k) return { width, height: 150 };
   return { width, height: Math.max(130, s.h! * k + 30) };
 };
+/** "28t · 전력 −6 · 2명" — the numbers you compare at a glance. */
+const keyStats = (s: Sprite) => {
+  const get = (k: string) => s.stats?.find((x) => x.k === k)?.v;
+  const w = get("무게")?.split(" ")[0], p = get("전력"), c = get("인력")?.split(" ")[0];
+  return [w, p && `전력 ${p}`, c].filter(Boolean).join(" · ") || s.note || "";
+};
+
 /** One stage width for the whole list, so the text column lines up. */
 const listStageWidth = (items: Sprite[]) =>
   Math.min(360, Math.max(210, ...items.map((s) => (s.gif && pixelScale(s) ? s.w! * pixelScale(s) + 28 : 0))));
@@ -82,6 +89,29 @@ function Zoom({ s, onClose }: { s: Sprite; onClose: () => void }) {
       </div>
     </div>,
     document.body,
+  );
+}
+
+/** Edit form for one item (list and grid share it). */
+function ItemEditor({ s, upd, remove }: { s: Sprite; upd: (id: string, f: Partial<Sprite>) => void; remove: () => void }) {
+  return (
+  <div className="space-y-0.5">
+    <Field value={s.name} placeholder="모듈 이름" className="font-semibold" onCommit={(v) => upd(s.id, { name: v })} />
+    <Field value={s.desc} placeholder="설명" multiline className="text-sm" onCommit={(v) => upd(s.id, { desc: v })} />
+    <Field value={s.note} placeholder="메모" className="text-xs" onCommit={(v) => upd(s.id, { note: v })} />
+    <Field value={statsText(s.stats)} placeholder={"성능 (한 줄에 하나)\n크기: 4×3칸\n무게: 28t"} multiline className="font-mono text-xs" onCommit={(v) => upd(s.id, { stats: parseStats(v) })} />
+    <Field value={s.lore ?? ""} placeholder="배경 설정" multiline className="text-xs" onCommit={(v) => upd(s.id, { lore: v })} />
+    <Field value={s.tip ?? ""} placeholder="운영 팁" className="text-xs" onCommit={(v) => upd(s.id, { tip: v })} />
+    <div className="flex items-center gap-1">
+      <select className="nb-field w-auto text-xs" value={s.tier ?? ""} onChange={(e) => upd(s.id, { tier: e.target.value || undefined })}>
+        <option value="">등급 없음</option>
+        {Object.keys(TIERS).map((t) => <option key={t} value={t}>{t}</option>)}
+      </select>
+      <Field value={s.tag} placeholder="분류" className="w-32 text-xs" onCommit={(v) => upd(s.id, { tag: v })} />
+      {s.gif && <Btn title="GIF 지우기" onClick={() => upd(s.id, { gif: "", w: undefined, h: undefined })}><X size={12} /></Btn>}
+      <Btn title="항목 삭제" onClick={remove}><Trash2 size={12} /></Btn>
+    </div>
+  </div>
   );
 }
 
@@ -145,6 +175,7 @@ export function SpriteGalleryView({ block, editor }: { block: AnyBlock; editor: 
   const tags = useMemo(() => [...new Set(d.items.map((i) => i.tag).filter(Boolean))], [d.items]);
   const shown = filter ? d.items.filter((i) => i.tag === filter) : d.items;
   const stageW = listStageWidth(d.items);
+  const gridStageH = Math.max(140, Math.round(d.size * 1.15));
   const done = d.items.filter((i) => i.gif).length;
   const upd = (id: string, f: Partial<Sprite>) => set((x) => ({ ...x, items: x.items.map((i) => (i.id === id ? { ...i, ...f } : i)) }));
 
@@ -210,23 +241,7 @@ export function SpriteGalleryView({ block, editor }: { block: AnyBlock; editor: 
               </div>
               <div className="min-w-0 flex-1 py-0.5">
                 {editing ? (
-                  <div className="space-y-0.5">
-                    <Field value={s.name} placeholder="모듈 이름" className="font-semibold" onCommit={(v) => upd(s.id, { name: v })} />
-                    <Field value={s.desc} placeholder="설명" multiline className="text-sm" onCommit={(v) => upd(s.id, { desc: v })} />
-                    <Field value={s.note} placeholder="메모" className="text-xs" onCommit={(v) => upd(s.id, { note: v })} />
-                    <Field value={statsText(s.stats)} placeholder={"성능 (한 줄에 하나)\n크기: 4×3칸\n무게: 28t"} multiline className="font-mono text-xs" onCommit={(v) => upd(s.id, { stats: parseStats(v) })} />
-                    <Field value={s.lore ?? ""} placeholder="배경 설정" multiline className="text-xs" onCommit={(v) => upd(s.id, { lore: v })} />
-                    <Field value={s.tip ?? ""} placeholder="운영 팁" className="text-xs" onCommit={(v) => upd(s.id, { tip: v })} />
-                    <div className="flex items-center gap-1">
-                      <select className="nb-field w-auto text-xs" value={s.tier ?? ""} onChange={(e) => upd(s.id, { tier: e.target.value || undefined })}>
-                        <option value="">등급 없음</option>
-                        {Object.keys(TIERS).map((t) => <option key={t} value={t}>{t}</option>)}
-                      </select>
-                      <Field value={s.tag} placeholder="분류" className="w-32 text-xs" onCommit={(v) => upd(s.id, { tag: v })} />
-                      {s.gif && <Btn title="GIF 지우기" onClick={() => upd(s.id, { gif: "", w: undefined, h: undefined })}><X size={12} /></Btn>}
-                      <Btn title="항목 삭제" onClick={() => set((x) => ({ ...x, items: x.items.filter((i) => i.id !== s.id) }))}><Trash2 size={12} /></Btn>
-                    </div>
-                  </div>
+                  <ItemEditor s={s} upd={upd} remove={() => set((x) => ({ ...x, items: x.items.filter((i) => i.id !== s.id) }))} />
                 ) : (
                   <>
                     <div className="flex flex-wrap items-center gap-2">
@@ -260,49 +275,44 @@ export function SpriteGalleryView({ block, editor }: { block: AnyBlock; editor: 
         </div>
       )}
 
-      {d.layout === "grid" && <div className="nb-gallery" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${d.size}px, 1fr))` }}>
-        {shown.map((s) => (
-          <div key={s.id} className="nb-gcard">
-            <div className={`nb-hangar ${d.bg === "dark" ? "" : bg}`} style={{ height: Math.max(100, d.size) * 0.8 }}>
-              {s.gif ? (
-                <Sprite s={s} maxW={Math.max(100, d.size) - 12} maxH={Math.max(100, d.size) * 0.8 - 18} onClick={() => setZoom(s)} />
-              ) : editable ? (
-                <button type="button" className="nb-gempty" onClick={() => setUploadFor(s)}><Upload size={16} />스프라이트 올리기</button>
-              ) : (
-                <span className="text-xs text-white/40">아직 없음</span>
-              )}
-              {s.gif && editing && (
-                <button type="button" title="바꾸기" className="nb-card-imgbtn" onClick={() => setUploadFor(s)}><Upload size={12} /></button>
-              )}
-            </div>
-            <div className="px-2 py-1.5">
+      {d.layout === "grid" && (
+        <div className="nb-ggrid" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${Math.max(170, d.size * 1.5)}px, 1fr))` }}>
+          {shown.map((s) => (
+            <div key={s.id} className="nb-gitem">
+              <div className={`nb-hangar ${d.bg === "dark" ? "" : bg}`} style={{ height: gridStageH }}>
+                {s.gif ? (
+                  <Sprite s={s} maxW={Math.max(170, d.size * 1.5) - 16} maxH={gridStageH - 22} onClick={() => setZoom(s)} />
+                ) : editable ? (
+                  <button type="button" className="nb-gempty" onClick={() => setUploadFor(s)}><Upload size={16} />올리기</button>
+                ) : (
+                  <span className="text-xs text-white/40">아직 없음</span>
+                )}
+                {s.gif && editing && (
+                  <button type="button" title="바꾸기" className="nb-card-imgbtn" onClick={() => setUploadFor(s)}><Upload size={12} /></button>
+                )}
+              </div>
               {editing ? (
-                <>
-                  <Field value={s.name} placeholder="모듈 이름" className="text-sm font-semibold" onCommit={(v) => upd(s.id, { name: v })} />
-                  <Field value={s.tag} placeholder="분류" className="text-xs" onCommit={(v) => upd(s.id, { tag: v })} />
-                  <Field value={s.note} placeholder="메모 (프레임 수, 상태 등)" className="text-xs" onCommit={(v) => upd(s.id, { note: v })} />
-                  <div className="mt-0.5 flex gap-1">
-                    {s.gif && <Btn title="GIF 지우기" onClick={() => upd(s.id, { gif: "", w: undefined, h: undefined })}><X size={12} /></Btn>}
-                    <Btn title="항목 삭제" onClick={() => set((x) => ({ ...x, items: x.items.filter((i) => i.id !== s.id) }))}><Trash2 size={12} /></Btn>
-                  </div>
-                </>
+                <div className="mt-2"><ItemEditor s={s} upd={upd} remove={() => set((x) => ({ ...x, items: x.items.filter((i) => i.id !== s.id) }))} /></div>
               ) : (
-                <>
-                  <div className="truncate text-sm font-semibold" title={s.name}>{s.name || "이름 없음"}</div>
-                  {s.desc && <div className="line-clamp-2 text-[11px]">{s.desc}</div>}
-                  <div className="truncate text-[11px] text-muted">{[s.tag, s.note].filter(Boolean).join(" · ")}</div>
-                </>
+                <button type="button" className="nb-gtext" onClick={() => s.gif && setZoom(s)}>
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <span className="truncate font-semibold">{s.name || "이름 없음"}</span>
+                    {s.tier && <span className="nb-tier shrink-0" style={{ color: TIERS[s.tier] ?? "inherit", borderColor: TIERS[s.tier] ?? "currentColor" }}>{s.tier}</span>}
+                  </span>
+                  {s.desc && <span className="nb-gdesc">{s.desc}</span>}
+                  {keyStats(s) && <span className="nb-gstats">{keyStats(s)}</span>}
+                </button>
               )}
             </div>
-          </div>
-        ))}
-        {editing && (
-          <button type="button" className="nb-gcard nb-card-add" style={{ minHeight: d.size * 0.8 + 40 }}
-            onClick={() => set((x) => ({ ...x, items: [...x.items, { id: uid(), name: "", tag: filter ?? "", desc: "", note: "", gif: "" }] }))}>
-            <Plus size={18} /> 항목 추가
-          </button>
-        )}
-      </div>}
+          ))}
+          {editing && (
+            <button type="button" className="nb-gadd" style={{ minHeight: gridStageH }}
+              onClick={() => set((x) => ({ ...x, items: [...x.items, { id: uid(), name: "", tag: filter ?? "", desc: "", note: "", gif: "" }] }))}>
+              <Plus size={18} /> 항목 추가
+            </button>
+          )}
+        </div>
+      )}
 
       {uploadFor && (
         <SpriteUpload
