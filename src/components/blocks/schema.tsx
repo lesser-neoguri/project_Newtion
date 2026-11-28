@@ -7,6 +7,7 @@ import { CARDS_DEFAULT, CalloutView, CardsView, RECIPE_DEFAULT, RecipeView, TIME
 import { PIXELCODE_DEFAULT, PixelCodeView } from "./pixel-code";
 import { PIXEL_DEFAULT, PixelArtView, PIXELART_PRESETS, SPRITE_DEFAULT, SpriteSheetView } from "./pixel-blocks";
 import { CURVE_DEFAULT, CurveView, DROP_DEFAULT, DropTableView } from "./data-blocks";
+import { GALLERY_DEFAULT, SpriteGalleryView } from "./sprite-gallery";
 import type { AnyEditor } from "./common";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -28,6 +29,7 @@ export const newtionSchema = BlockNoteSchema.create({
     curve: plain("curve", CurveView)(),
     dropTable: plain("dropTable", DropTableView)(),
     recipe: plain("recipe", RecipeView)(),
+    spriteGallery: plain("spriteGallery", SpriteGalleryView)(),
   } as any,
 });
 
@@ -35,7 +37,7 @@ const GROUP = "게임 개발";
 
 const STARTERS: Record<string, object> = {
   cards: CARDS_DEFAULT, timeline: TIMELINE_DEFAULT, pixelCode: PIXELCODE_DEFAULT, spriteSheet: SPRITE_DEFAULT,
-  pixelArt: PIXEL_DEFAULT, curve: CURVE_DEFAULT, dropTable: DROP_DEFAULT, recipe: RECIPE_DEFAULT,
+  pixelArt: PIXEL_DEFAULT, curve: CURVE_DEFAULT, dropTable: DROP_DEFAULT, recipe: RECIPE_DEFAULT, spriteGallery: GALLERY_DEFAULT,
 };
 
 function customItems(editor: AnyEditor): DefaultReactSuggestionItem[] {
@@ -53,6 +55,7 @@ function customItems(editor: AnyEditor): DefaultReactSuggestionItem[] {
     item("가로 스크롤 카드", "옆으로 넘기는 카드 묶음 (아이템·바이옴·NPC)", "🃏", ["cards", "carousel", "가로", "스크롤", "갤러리"], add("cards")),
     item("연대표", "세계관 역사·개발 일정 타임라인", "🕰️", ["timeline", "타임라인", "연표", "역사", "일정"], add("timeline")),
     item("픽셀 코드", "JS로 픽셀을 그리고 움직이는 놀이터", "👾", ["pixel", "code", "canvas", "코드", "프로토타입", "놀이터"], add("pixelCode")),
+    item("스프라이트 도감", "모듈·유닛별 스프라이트 애니메이션을 GIF로 모아 보기", "🎞️", ["gif", "sprite", "gallery", "도감", "모듈", "애니메이션", "스프라이트"], add("spriteGallery")),
     item("스프라이트 · 이펙트", "스프라이트 시트를 잘라서 애니메이션 재생", "✨", ["sprite", "effect", "애니메이션", "이펙트", "시트"], add("spriteSheet")),
     item("픽셀 아트 · 배치도", "도트 그리기 / 이동 성채 모듈 배치도", "🧱", ["pixel art", "tile", "도트", "타일", "배치도", "성채", "모듈"], add("pixelArt")),
     item("빈 16×16 스프라이트", "도트 캔버스부터 시작", "🎨", ["sprite", "도트", "16"], add("pixelArt", { data: JSON.stringify(PIXELART_PRESETS.sprite.data) })),

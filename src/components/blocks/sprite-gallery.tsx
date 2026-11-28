@@ -1,0 +1,325 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Download, ListPlus, Plus, Trash2, Upload, X } from "lucide-react";
+import { Btn, Field, Shell, uid, useBlockData, type AnyBlock, type AnyEditor } from "./common";
+import { download, framesToGif, loadImage, sheetFrames, sheetToGif } from "@/lib/gif";
+
+interface Sprite { id: string; name: string; tag: string; note: string; gif: string; w?: number; h?: number }
+interface GalleryData { size: number; bg: "checker" | "dark" | "light"; items: Sprite[] }
+export const GALLERY_DEFAULT: GalleryData = { size: 140, bg: "dark", items: [] };
+
+const cellText = (cell: AnyBlock): string => {
+  const content = Array.isArray(cell) ? cell : cell?.content;
+  return Array.isArray(content) ? content.map((c: AnyBlock) => (c.type === "text" ? c.text : c.type === "link" ? cellText(c.content) : "")).join("").trim() : "";
+};
+
+/** Module names from this page's tables (first column), grouped under the nearest heading. */
+function namesFromTables(doc: AnyBlock[]): { name: string; tag: string }[] {
+  const out: { name: string; tag: string }[] = [];
+  let tag = "";
+  const walk = (blocks: AnyBlock[]) => {
+    for (const b of blocks) {
+      if (b.type === "heading") tag = cellText(b.content).replace(/^\d+[.)]\s*/, "");
+      if (b.type === "table") {
+        const rows: AnyBlock[] = b.content?.rows ?? [];
+        for (const r of rows.slice(1)) {
+          const name = cellText(r.cells?.[0]).replace(/\s+/g, " ");
+          if (name) out.push({ name, tag });
+        }
+      }
+      if (b.children?.length) walk(b.children);
+    }
+  };
+  walk(doc);
+  return out;
+}
+
+export function SpriteGalleryView({ block, editor }: { block: AnyBlock; editor: AnyEditor }) {
+  const [d, set, editable] = useBlockData(block, editor, GALLERY_DEFAULT);
+  const [edit, setEdit] = useState(false);
+  const [filter, setFilter] = useState<string | null>(null);
+  const [uploadFor, setUploadFor] = useState<Sprite | null>(null);
+  const [zoom, setZoom] = useState<Sprite | null>(null);
+  const editing = editable && edit;
+  const tags = useMemo(() => [...new Set(d.items.map((i) => i.tag).filter(Boolean))], [d.items]);
+  const shown = filter ? d.items.filter((i) => i.tag === filter) : d.items;
+  const done = d.items.filter((i) => i.gif).length;
+  const upd = (id: string, f: Partial<Sprite>) => set((x) => ({ ...x, items: x.items.map((i) => (i.id === id ? { ...i, ...f } : i)) }));
+
+  const importNames = () => {
+    const found = namesFromTables(editor.document);
+    const have = new Set(d.items.map((i) => i.name));
+    const add = found.filter((f) => !have.has(f.name));
+    if (!found.length) return alert("이 페이지에서 표를 찾지 못했어요. 표의 첫 번째 열을 모듈 이름으로 읽어요.");
+    if (!add.length) return alert("표에 있는 모듈은 이미 모두 들어 있어요.");
+    set((x) => ({ ...x, items: [...x.items, ...add.map((a) => ({ id: uid(), name: a.name, tag: a.tag, note: "", gif: "" }))] }));
+  };
+
+  const bg = d.bg === "checker" ? "nb-checker" : d.bg === "light" ? "bg-white" : "bg-[#0b1020]";
+
+  return (
+    <Shell icon="🎞️" title={`스프라이트 도감 · ${done}/${d.items.length}`} actions={
+      <>
+        {editable && <Btn title="이 페이지 표의 첫 열(모듈 이름)을 항목으로 불러오기" onClick={importNames}><ListPlus size={13} /> 표에서 불러오기</Btn>}
+        {editable && <Btn active={edit} onClick={() => setEdit((v) => !v)}>{edit ? "완료" : "편집"}</Btn>}
+      </>
+    }>
+      {(tags.length > 0 || editing) && (
+        <div className="nb-row mb-2">
+          {tags.length > 0 && (
+            <>
+              <Btn active={!filter} onClick={() => setFilter(null)}>전체 {d.items.length}</Btn>
+              {tags.map((t) => <Btn key={t} active={filter === t} onClick={() => setFilter(filter === t ? null : t)}>{t} {d.items.filter((i) => i.tag === t).length}</Btn>)}
+            </>
+          )}
+          {editing && (
+            <span className="ml-auto flex flex-wrap items-center gap-2">
+              <label className="nb-label">크기 <input type="range" min={80} max={280} value={d.size} onChange={(e) => set({ ...d, size: +e.target.value })} /></label>
+              {(["dark", "checker", "light"] as const).map((b) => <Btn key={b} active={d.bg === b} onClick={() => set({ ...d, bg: b })}>{b === "dark" ? "어둡게" : b === "checker" ? "격자" : "밝게"}</Btn>)}
+            </span>
+          )}
+        </div>
+      )}
+
+      {d.items.length === 0 && (
+        <div className="rounded-md border border-dashed border-line p-6 text-center text-sm text-muted">
+          모듈마다 스프라이트 애니메이션(GIF)을 모아 보는 곳이에요.
+          {editable && <> <b className="text-foreground">표에서 불러오기</b>로 이 페이지 표의 모듈 이름을 한 번에 넣거나, 편집 → 항목 추가로 시작하세요.</>}
+        </div>
+      )}
+
+      <div className="nb-gallery" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${d.size}px, 1fr))` }}>
+        {shown.map((s) => (
+          <div key={s.id} className="nb-gcard">
+            <div className={`nb-gimg ${bg}`} style={{ height: d.size * 0.8 }}>
+              {s.gif ? (
+                <button type="button" className="h-full w-full" onClick={() => setZoom(s)} title="크게 보기">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={s.gif} alt={s.name} loading="lazy" />
+                </button>
+              ) : editable ? (
+                <button type="button" className="nb-gempty" onClick={() => setUploadFor(s)}><Upload size={16} />스프라이트 올리기</button>
+              ) : (
+                <span className="text-xs text-white/40">아직 없음</span>
+              )}
+              {s.gif && editable && (
+                <button type="button" title="바꾸기" className="nb-card-imgbtn" onClick={() => setUploadFor(s)}><Upload size={12} /></button>
+              )}
+            </div>
+            <div className="px-2 py-1.5">
+              {editing ? (
+                <>
+                  <Field value={s.name} placeholder="모듈 이름" className="text-sm font-semibold" onCommit={(v) => upd(s.id, { name: v })} />
+                  <Field value={s.tag} placeholder="분류" className="text-xs" onCommit={(v) => upd(s.id, { tag: v })} />
+                  <Field value={s.note} placeholder="메모 (프레임 수, 상태 등)" className="text-xs" onCommit={(v) => upd(s.id, { note: v })} />
+                  <div className="mt-0.5 flex gap-1">
+                    {s.gif && <Btn title="GIF 지우기" onClick={() => upd(s.id, { gif: "", w: undefined, h: undefined })}><X size={12} /></Btn>}
+                    <Btn title="항목 삭제" onClick={() => set((x) => ({ ...x, items: x.items.filter((i) => i.id !== s.id) }))}><Trash2 size={12} /></Btn>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="truncate text-sm font-semibold" title={s.name}>{s.name || "이름 없음"}</div>
+                  <div className="truncate text-[11px] text-muted">{[s.tag, s.note].filter(Boolean).join(" · ")}</div>
+                </>
+              )}
+            </div>
+          </div>
+        ))}
+        {editing && (
+          <button type="button" className="nb-gcard nb-card-add" style={{ minHeight: d.size * 0.8 + 40 }}
+            onClick={() => set((x) => ({ ...x, items: [...x.items, { id: uid(), name: "", tag: filter ?? "", note: "", gif: "" }] }))}>
+            <Plus size={18} /> 항목 추가
+          </button>
+        )}
+      </div>
+
+      {uploadFor && (
+        <SpriteUpload
+          name={uploadFor.name}
+          onClose={() => setUploadFor(null)}
+          onDone={async (gif, w, h) => {
+            const file = new File([gif], `${uploadFor.name || "sprite"}.gif`, { type: "image/gif" });
+            const url = String(await editor.uploadFile(file));
+            upd(uploadFor.id, { gif: url, w, h });
+            setUploadFor(null);
+          }}
+        />
+      )}
+      {zoom && (
+        <div className="fixed inset-0 z-[98] flex flex-col items-center justify-center gap-3 bg-black/85 p-4" onClick={() => setZoom(null)}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={zoom.gif} alt={zoom.name} className="max-h-[70vh] max-w-full object-contain" style={{ imageRendering: "pixelated", width: zoom.w ? Math.min(zoom.w * 4, 640) : undefined }} />
+          <div className="text-center text-white">
+            <div className="font-semibold">{zoom.name}</div>
+            <div className="text-xs text-white/60">{[zoom.tag, zoom.note, zoom.w && `${zoom.w}×${zoom.h}px`].filter(Boolean).join(" · ")}</div>
+          </div>
+          <a href={zoom.gif} download={`${zoom.name || "sprite"}.gif`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1 rounded-md bg-white/15 px-3 py-1.5 text-sm text-white hover:bg-white/25">
+            <Download size={14} /> GIF 받기
+          </a>
+        </div>
+      )}
+    </Shell>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Upload: GIF as-is, or a sprite sheet / separate frames → GIF        */
+/* ------------------------------------------------------------------ */
+
+type Source =
+  | { kind: "gif"; file: File; url: string; w: number; h: number }
+  | { kind: "sheet"; img: HTMLImageElement; url: string }
+  | { kind: "frames"; imgs: HTMLImageElement[] };
+
+function SpriteUpload({ name, onClose, onDone }: { name: string; onClose: () => void; onDone: (gif: Blob, w: number, h: number) => Promise<void> }) {
+  const [src, setSrc] = useState<Source | null>(null);
+  const [fw, setFw] = useState(32);
+  const [fh, setFh] = useState(32);
+  const [frames, setFrames] = useState(0);
+  const [fps, setFps] = useState(10);
+  const [scale, setScale] = useState(2);
+  const [pingpong, setPingpong] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [cur, setCur] = useState(0);
+  const input = useRef<HTMLInputElement>(null);
+  const cv = useRef<HTMLCanvasElement>(null);
+
+  const pick = async (files: File[]) => {
+    setError(null);
+    if (!files.length) return;
+    try {
+      if (files.length === 1 && files[0].type === "image/gif") {
+        const url = URL.createObjectURL(files[0]);
+        const img = await loadImage(url);
+        setSrc({ kind: "gif", file: files[0], url, w: img.width, h: img.height });
+      } else if (files.length === 1) {
+        const url = URL.createObjectURL(files[0]);
+        const img = await loadImage(url);
+        // Guess: one row of square frames, else the whole image is one frame.
+        const square = img.width % img.height === 0 ? img.height : img.width;
+        setFw(square); setFh(img.height); setFrames(0);
+        setSrc({ kind: "sheet", img, url });
+      } else {
+        const sorted = [...files].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+        const imgs = await Promise.all(sorted.map((f) => loadImage(URL.createObjectURL(f))));
+        setSrc({ kind: "frames", imgs });
+      }
+    } catch (e) { setError((e as Error).message); }
+  };
+
+  // Live preview
+  const count = !src ? 0 : src.kind === "frames" ? src.imgs.length : src.kind === "sheet" ? sheetFrames(src.img.width, src.img.height, { fw, fh, frames, fps }).length : 1;
+  useEffect(() => {
+    if (!src || src.kind === "gif" || count < 1) return;
+    let i = 0, dir = 1;
+    const id = setInterval(() => {
+      if (pingpong && count > 2) { i += dir; if (i >= count - 1 || i <= 0) dir = -dir; } else i = (i + 1) % count;
+      setCur(i);
+    }, 1000 / Math.max(1, fps));
+    return () => clearInterval(id);
+  }, [src, count, fps, pingpong]);
+  useEffect(() => {
+    const c = cv.current;
+    if (!c || !src || src.kind === "gif") return;
+    const g = c.getContext("2d")!;
+    g.imageSmoothingEnabled = false;
+    g.clearRect(0, 0, c.width, c.height);
+    if (src.kind === "sheet") {
+      const r = sheetFrames(src.img.width, src.img.height, { fw, fh, frames, fps })[cur % count];
+      if (r) g.drawImage(src.img, r.sx, r.sy, fw, fh, 0, 0, c.width, c.height);
+    } else {
+      const im = src.imgs[cur % count];
+      g.drawImage(im, 0, 0, im.width * (c.width / Math.max(...src.imgs.map((x) => x.width))), im.height * (c.height / Math.max(...src.imgs.map((x) => x.height))));
+    }
+  }, [src, cur, count, fw, fh, frames, fps]);
+
+  const outW = !src ? 0 : src.kind === "gif" ? src.w : src.kind === "sheet" ? fw * scale : Math.max(...src.imgs.map((x) => x.width)) * scale;
+  const outH = !src ? 0 : src.kind === "gif" ? src.h : src.kind === "sheet" ? fh * scale : Math.max(...src.imgs.map((x) => x.height)) * scale;
+
+  async function save() {
+    if (!src) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const gif = src.kind === "gif" ? src.file
+        : src.kind === "sheet" ? sheetToGif(src.img, { fw, fh, frames, fps, scale, pingpong })
+          : framesToGif(src.imgs, fps, scale, pingpong);
+      await onDone(gif, outW, outH);
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  }
+
+  const n = (v: number, setV: (v: number) => void, min: number, max: number) => (
+    <input className="nb-field w-14" type="number" min={min} max={max} value={v} onChange={(e) => setV(Math.max(min, Math.min(max, +e.target.value || min)))} />
+  );
+
+  return (
+    <div className="fixed inset-0 z-[96] flex items-end justify-center bg-black/40 md:items-center" onClick={() => !busy && onClose()}>
+      <div onClick={(e) => e.stopPropagation()} className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-background p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl md:rounded-xl">
+        <div className="mb-3 flex items-center justify-between">
+          <b>{name || "스프라이트"} · 애니메이션 올리기</b>
+          <button type="button" disabled={busy} onClick={onClose} className="rounded p-1 hover:bg-hover"><X size={16} /></button>
+        </div>
+
+        <div
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => { e.preventDefault(); void pick([...e.dataTransfer.files]); }}
+          className="rounded-lg border-2 border-dashed border-line p-4 text-center text-sm"
+        >
+          <button type="button" className="nb-btn" onClick={() => input.current?.click()}><Upload size={13} /> 파일 고르기</button>
+          <p className="mt-2 text-xs text-muted">GIF는 그대로 · 스프라이트 시트 PNG 1장은 프레임을 잘라서 · PNG 여러 장은 이름 순서대로 프레임으로 → GIF로 만들어요</p>
+          <input ref={input} type="file" accept="image/gif,image/png,image/webp" multiple hidden onChange={(e) => { void pick([...(e.target.files ?? [])]); e.target.value = ""; }} />
+        </div>
+
+        {src && (
+          <div className="mt-3 flex flex-wrap items-start gap-3">
+            <div className="nb-checker flex items-center justify-center rounded-md p-2" style={{ minWidth: 96, minHeight: 96 }}>
+              {src.kind === "gif" ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={src.url} alt="" style={{ imageRendering: "pixelated", maxWidth: 200, width: Math.min(src.w * 3, 200) }} />
+              ) : (
+                <canvas ref={cv} width={Math.min(outW, 200)} height={Math.min(outW, 200) * (outH / Math.max(1, outW))} style={{ imageRendering: "pixelated" }} />
+              )}
+            </div>
+            <div className="min-w-[200px] flex-1 space-y-1.5 text-xs">
+              {src.kind === "gif" && <p className="text-muted">GIF {src.w}×{src.h}px를 그대로 올려요.</p>}
+              {src.kind === "sheet" && (
+                <>
+                  <p className="text-muted">시트 {src.img.width}×{src.img.height}px · 프레임 {count}개</p>
+                  <div className="nb-row"><span className="nb-label">프레임 크기</span>{n(fw, setFw, 1, 2048)}×{n(fh, setFh, 1, 2048)}</div>
+                  <div className="nb-row"><span className="nb-label">개수(0=전부)</span>{n(frames, setFrames, 0, 999)}</div>
+                </>
+              )}
+              {src.kind === "frames" && <p className="text-muted">프레임 {src.imgs.length}장 (파일 이름 순서)</p>}
+              {src.kind !== "gif" && (
+                <>
+                  <div className="nb-row"><span className="nb-label">FPS</span>{n(fps, setFps, 1, 50)}<span className="nb-label">GIF 배율</span>{n(scale, setScale, 1, 8)}</div>
+                  <label className="nb-label"><input type="checkbox" checked={pingpong} onChange={(e) => setPingpong(e.target.checked)} /> 왕복 재생</label>
+                  <p className="text-muted">결과: {outW}×{outH}px GIF</p>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+        {error && <p className="nb-error">{error}</p>}
+        <div className="mt-3 flex gap-2">
+          {src && src.kind !== "gif" && (
+            <button type="button" className="nb-btn" disabled={busy} onClick={() => {
+              const gif = src.kind === "sheet" ? sheetToGif(src.img, { fw, fh, frames, fps, scale, pingpong }) : framesToGif(src.imgs, fps, scale, pingpong);
+              download(gif, `${name || "sprite"}.gif`);
+            }}><Download size={13} /> GIF 받기</button>
+          )}
+          <button type="button" disabled={!src || busy} onClick={() => void save()}
+            className="flex-1 rounded-md bg-accent py-2 text-sm font-medium text-white disabled:opacity-50">
+            {busy ? "올리는 중…" : src?.kind === "gif" ? "올리기" : "GIF로 만들어 올리기"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

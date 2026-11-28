@@ -13,7 +13,7 @@ export const uid = () => Math.random().toString(36).slice(2, 9);
 /** Lists written by AI tools (or by hand in Markdown) may lack ids: give them stable ones. */
 function withIds<T extends object>(d: T): T {
   const out = { ...d } as Record<string, unknown>;
-  for (const k of ["cards", "events", "recipes", "series", "rows"]) {
+  for (const k of ["cards", "events", "recipes", "series", "rows", "items"]) {
     const list = out[k];
     if (Array.isArray(list) && list.some((x) => x && typeof x === "object" && !("id" in x))) {
       out[k] = list.map((x, i) => (x && typeof x === "object" && !("id" in x) ? { ...x, id: `i${i}` } : x));

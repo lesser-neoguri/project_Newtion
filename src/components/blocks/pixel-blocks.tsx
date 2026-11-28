@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Download, Eraser, PaintBucket, Pause, Pencil, Pipette, Play, Plus, SkipBack, SkipForward, Upload } from "lucide-react";
 import { Btn, Field, Shell, useBlockData, type AnyBlock, type AnyEditor } from "./common";
+import { download, sheetToGif } from "@/lib/gif";
 
 /* ------------------------------------------------------------------ */
 /* Sprite sheet animation / effect viewer                              */
@@ -112,6 +113,11 @@ export function SpriteSheetView({ block, editor }: { block: AnyBlock; editor: An
         <Btn title="이전 프레임" onClick={() => { setPlaying(false); setCur((c) => (c - 1 + total) % total); }}><SkipBack size={13} /></Btn>
         <Btn title={playing ? "멈춤" : "재생"} onClick={() => setPlaying((v) => !v)}>{playing ? <Pause size={13} /> : <Play size={13} />}</Btn>
         <Btn title="다음 프레임" onClick={() => { setPlaying(false); setCur((c) => (c + 1) % total); }}><SkipForward size={13} /></Btn>
+        <Btn title="지금 설정(프레임·FPS·배율·왕복)으로 GIF 파일 저장" disabled={!img} onClick={() => {
+          if (!img) return;
+          try { download(sheetToGif(img, { fw: d.fw, fh: d.fh, start: d.start, frames: d.frames, fps: d.fps, scale: Math.min(d.scale, 4), pingpong: d.pingpong }), "sprite.gif"); }
+          catch (e) { alert(`GIF를 만들지 못했어요: ${(e as Error).message}`); }
+        }}><Download size={13} /> GIF</Btn>
         {editable && <Btn disabled={busy} onClick={() => file.current?.click()}><Upload size={13} /> {busy ? "올리는 중" : "시트 올리기"}</Btn>}
       </>
     }>

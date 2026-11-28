@@ -167,7 +167,7 @@ function TextToolbar({ children }: { children: React.ReactNode }) {
   if (OWN_BLOCKS.has(type)) return null;
   return <FormattingToolbar>{children}</FormattingToolbar>;
 }
-const OWN_BLOCKS = new Set(["cards", "timeline", "pixelCode", "spriteSheet", "pixelArt", "curve", "dropTable", "recipe"]);
+const OWN_BLOCKS = new Set(["cards", "timeline", "pixelCode", "spriteSheet", "pixelArt", "curve", "dropTable", "recipe", "spriteGallery"]);
 
 export type { BlockNoteEditor };
 export type { SelectionAttachment } from "@/lib/selection";

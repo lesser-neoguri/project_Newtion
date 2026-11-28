@@ -13,7 +13,7 @@
  */
 
 export const CUSTOM_BLOCK_TYPES = [
-  "callout", "cards", "timeline", "pixelCode", "spriteSheet", "pixelArt", "curve", "dropTable", "recipe",
+  "callout", "cards", "timeline", "pixelCode", "spriteSheet", "pixelArt", "curve", "dropTable", "recipe", "spriteGallery",
 ] as const;
 export type CustomBlockType = (typeof CUSTOM_BLOCK_TYPES)[number];
 
@@ -31,6 +31,7 @@ export const BLOCK_CONFIGS = {
   curve: { type: "curve", propSchema: { data: { default: "" } }, content: "none" },
   dropTable: { type: "dropTable", propSchema: { data: { default: "" } }, content: "none" },
   recipe: { type: "recipe", propSchema: { data: { default: "" } }, content: "none" },
+  spriteGallery: { type: "spriteGallery", propSchema: { data: { default: "" } }, content: "none" },
 } as const;
 
 /** What each block is, for AI tools reading the fenced JSON. */
@@ -43,6 +44,7 @@ export const BLOCK_HELP: Record<CustomBlockType, string> = {
   pixelArt: '픽셀 아트/타일 배치도. {"w":16,"h":16,"cell":16,"palette":[{"c":"#hex","name":"이름"}],"px":"행 우선 문자열: . = 빈칸, 0-9a-z = 팔레트 번호"}',
   curve: '밸런스 곡선. {"from":1,"to":50,"step":1,"xLabel":"레벨","series":[{"name":"","expr":"10*1.15^x","color":"#hex"}]}',
   dropTable: '드롭 테이블. {"rolls":1,"rows":[{"name":"","weight":10,"min":1,"max":1,"rarity":"common|uncommon|rare|epic|legendary"}]}',
+  spriteGallery: '스프라이트 도감(모듈별 GIF). {"size":140,"bg":"dark|checker|light","items":[{"name":"","tag":"분류","note":"","gif":"GIF url"}]}',
   recipe: '제작 레시피. {"recipes":[{"station":"","inputs":[{"name":"","qty":1}],"output":{"name":"","qty":1},"time":""}]}',
 };
 
